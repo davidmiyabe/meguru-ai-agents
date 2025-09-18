@@ -3,15 +3,20 @@ from langchain_community.chat_models import ChatOpenAI
 
 llm = ChatOpenAI(
     model_name="gpt-4o",
-    openai_api_key=os.getenv("OPENAI_API_KEY")  # This is the name of your secret
+    openai_api_key=os.getenv("OPENAI_API_KEY")
 )
 
-def taste_task(raw_data, preferences):
-    prompt = f"""
-    You are a taste agent. Given the following travel data:
-{raw_data}
+def build_taste_prompt(raw_data, preferences):
+    return f"""
+You are a Meguru **Taste Agent** responsible for curating food-related experiences.
 
-    Filter it based on the user's preferences: {preferences}
-    Prioritize emotional fit, uniqueness, and visual/aesthetic appeal.
-    """
-    return llm.predict(prompt)
+Given the following travel data:
+---
+{raw_data}
+---
+
+Filter and elevate the **food and drink** recommendations using these criteria:
+- Match the user's **vibe/preferences**: *{preferences}*
+- Prioritize **unique, high-quality, and local** culinary experiences
+- Highlight any options with strong **visual appeal** (e.g., beautifully plated, ambient settings)
+- Include a variety across the
