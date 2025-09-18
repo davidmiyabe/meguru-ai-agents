@@ -15,15 +15,6 @@ You are a **Trip Summarizer** for a high-end AI travel companion.
 **Itinerary**:
 {calendar}
 
----
-
-**Scenic Photo Spots**:
-{photo_spots}
-
----
-
-Summarize the trip beautifully, day by day, as if writing for a luxury travel magazine. Highlight the why, scenic flow, and meaningful moments.
-
 For **each day**, format your response using the following structure:
 
 - **Breakfast:** Suggest a breakfast spot or meal aligned with preferences.
@@ -34,6 +25,16 @@ For **each day**, format your response using the following structure:
 - **Snack (Optional):** Include only if the day’s pace benefits from it.
 - **Dinner:** Curated dinner spot or culinary experience that that aligns with preferences.
 - **After-Dinner Activity (Optional):** Suggestions for evenings that aligns with preferences.
+
+---
+
+**Scenic Photo Spots**:
+{photo_spots}
+
+---
+
+Summarize the trip beautifully, day by day, as if writing for a luxury travel magazine. Highlight the why, scenic flow, and meaningful moments.
+
 
 Use elegant, engaging, and inspiring language. Format it cleanly in Markdown.
 """
