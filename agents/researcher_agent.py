@@ -8,8 +8,8 @@ llm = ChatOpenAI(
 
 def researcher_task(destination, dates):
     prompt = f"""
-    You are a travel researcher. List top 3 Meguru-style boutique stays, 3 must-visit nature spots,
-    and 3 hidden food gems and local tea houses in {destination} between {dates}.
-    No tourist traps. Prioritize beauty, walkability, and tea culture.
+    You are a travel researcher. List top 3 stays, 10 must-visit spots based on the user's preferences: {preferences},
+    and 10 hidden food gems in {destination} between {dates}.
+    No tourist traps. Prioritize based on the user's preferences: {preferences} prioritize emotional fit, uniqueness, and visual/aesthetic appeal
     """
     return llm.predict(prompt)
