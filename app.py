@@ -1,5 +1,7 @@
 import streamlit as st
 from workflows.trip_planner_flow import run_trip_pipeline
+from dotenv import load_dotenv
+load_dotenv()
 
 st.title("🧠 Meguru AI Travel Companion")
 
