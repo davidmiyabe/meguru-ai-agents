@@ -7,7 +7,7 @@ from agents.summary_agent import summary_task
 def run_trip_pipeline(destination, dates, preferences):
     raw_data = researcher_task(destination, dates, preferences)
     filtered_data = taste_task(raw_data, preferences)
-    calendar = planner_task(filtered_data, dates)
+    calendar = planner_task(filtered_data, dates, preferences)
     scenic_spots = vision_task(destination)
     summary = summary_task(calendar, scenic_spots)
     return summary
