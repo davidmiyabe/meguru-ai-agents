@@ -6,17 +6,26 @@ llm = ChatOpenAI(
     openai_api_key=os.getenv("OPENAI_API_KEY")
 )
 
-def build_taste_prompt(raw_data, preferences):
-    return f"""
-You are a Meguru **Taste Agent** responsible for curating food-related experiences.
+def taste_task(raw_data, preferences):
+    prompt = f"""
+You are a **Taste Agent** for a travel planning AI. Your job is to curate meaningful, personalized, ideal, beautiful, and delicious experiences for travelers.
 
-Given the following travel data:
 ---
+
+**Traveler Preferences**: {preferences}
+
+**Raw Travel Data**:
 {raw_data}
+
 ---
 
-Filter and elevate the **food and drink** recommendations using these criteria:
-- Match the user's **vibe/preferences**: *{preferences}*
-- Prioritize **unique, high-quality, and local** culinary experiences
-- Highlight any options with strong **visual appeal** (e.g., beautifully plated, ambient settings)
-- Include a variety across the
+Filter and enhance the above data to include:
+- Unique and visually striking food/drink stops
+- Culturally rich or emotionally resonant experiences
+- Local flavors and specialty dishes
+- Any recommended snack stops or desserts that align with the vibe
+
+Prioritize storytelling, uniqueness, and emotional fit.
+Output in Markdown format.
+"""
+    return llm.predict(prompt)
