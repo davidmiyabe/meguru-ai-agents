@@ -6,32 +6,24 @@ llm = ChatOpenAI(
     openai_api_key=os.getenv("OPENAI_API_KEY")
 )
 
-def build_summary_prompt(calendar, photo_spots):
-    return f"""
-You are a **Meguru Trip Summarizer**.
-
-Your goal is to create a **cinematic, emotionally resonant, and well-formatted summary** of the following trip:
+def summary_task(calendar, photo_spots):
+    prompt = f"""
+You are a **Trip Summarizer** for a high-end AI travel companion.
 
 ---
 
-**📅 Itinerary:**
+**Itinerary**:
 {calendar}
 
 ---
 
-**📸 Scenic Photo Spots:**
+**Scenic Photo Spots**:
 {photo_spots}
 
 ---
 
-**Output Instructions:**
-- Write a day-by-day summary in **Markdown** with headings for each day (e.g. `### Day 1: Arrival in Kyoto`)
-- Keep the tone **peaceful, poetic, and inspiring**
-- Add light transitions between morning → afternoon → evening
-- Include references to the **photo spots** when relevant to enhance the storytelling
-- Close with a brief reflection on the overall trip mood or intention
+Summarize the trip beautifully, day by day, as if writing for a luxury travel magazine. Highlight the emotional tone, scenic flow, and meaningful moments.
 
-Your output should feel like a memory—inviting, vivid, and gentle.
+Use elegant, engaging, and inspiring language. Format it cleanly in Markdown.
 """
-
-def summary_task(calendar, p_
+    return llm.predict(prompt)
