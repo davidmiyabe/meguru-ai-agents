@@ -16,6 +16,7 @@ _SWAP_FEEDBACK_KEY = "_itinerary_swap_feedback"
 _SWAP_CONSTRAINTS_KEY = "_itinerary_swap_constraints"
 _SWAP_SUCCESS_KEY = "_itinerary_swap_success"
 _VIEW_STATE_KEY = "_itinerary_view_mode"
+SELECTED_SLOT_KEY = "_itinerary_selected_slot"
 
 _SCHEDULE_SLOTS: Tuple[str, ...] = (
     "Morning",
@@ -61,6 +62,7 @@ def _ensure_session_state() -> None:
     st.session_state.setdefault(_SWAP_FEEDBACK_KEY, "")
     st.session_state.setdefault(_SWAP_CONSTRAINTS_KEY, "")
     st.session_state.setdefault(_VIEW_STATE_KEY, "List")
+    st.session_state.setdefault(SELECTED_SLOT_KEY, None)
 
 
 def _get_refiner_agent() -> RefinerAgent:
@@ -160,23 +162,43 @@ def _build_schedule(day: DayPlan) -> Dict[str, List[Tuple[int, ItineraryEvent]]]
 
 
 def _render_list_event(day_index: int, event_index: int, event: ItineraryEvent) -> None:
-    details_col, action_col = st.columns([4, 1])
-    with details_col:
-        primary = _event_primary_label(event)
-        time_range = _format_time_range(event)
-        header = f"**{primary}**"
-        if time_range:
-            header += f" · {time_range}"
-        st.markdown(header)
-        for line in _event_secondary_lines(event):
-            st.caption(line)
-    action_col.button(
-        "Swap this",
-        key=f"swap_list_{day_index}_{event_index}",
-        on_click=_open_swap,
-        args=(day_index, event_index),
-        use_container_width=True,
-    )
+    selected_slot = st.session_state.get(SELECTED_SLOT_KEY)
+    is_selected = selected_slot == (day_index, event_index)
+
+    highlight_start = ""
+    highlight_end = ""
+    if is_selected:
+        highlight_start = (
+            "<div style=\"background-color:#eef2ff;border-left:4px solid "
+            "#3b82f6;padding:0.75rem;border-radius:0.5rem;\">"
+        )
+        highlight_end = "</div>"
+
+    container = st.container()
+    with container:
+        if highlight_start:
+            st.markdown(highlight_start, unsafe_allow_html=True)
+
+        details_col, action_col = st.columns([4, 1])
+        with details_col:
+            primary = _event_primary_label(event)
+            time_range = _format_time_range(event)
+            header = f"**{primary}**"
+            if time_range:
+                header += f" · {time_range}"
+            st.markdown(header)
+            for line in _event_secondary_lines(event):
+                st.caption(line)
+        action_col.button(
+            "Swap this",
+            key=f"swap_list_{day_index}_{event_index}",
+            on_click=_open_swap,
+            args=(day_index, event_index),
+            use_container_width=True,
+        )
+
+        if highlight_end:
+            st.markdown(highlight_end, unsafe_allow_html=True)
 
 
 def _render_schedule_event(
@@ -390,5 +412,5 @@ def render_itinerary_tab(container) -> None:
         _render_swap_modal(itinerary)
 
 
-__all__ = ["render_itinerary_tab"]
+__all__ = ["render_itinerary_tab", "SELECTED_SLOT_KEY"]
 

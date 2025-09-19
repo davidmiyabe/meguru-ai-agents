@@ -6,7 +6,12 @@ from typing import Sequence
 import streamlit as st
 from dotenv import load_dotenv
 
-from meguru.ui import ensure_plan_state, render_itinerary_tab, render_plan_tab
+from meguru.ui import (
+    ensure_plan_state,
+    render_itinerary_tab,
+    render_map_tab,
+    render_plan_tab,
+)
 
 
 _TAB_ORDER: Sequence[str] = ("Plan", "Itinerary", "Map", "Profile")
@@ -48,8 +53,7 @@ def render() -> None:
 
     render_plan_tab(tab_lookup["Plan"])
     render_itinerary_tab(tab_lookup["Itinerary"])
-
-    tab_lookup["Map"].write("Map view coming soon.")
+    render_map_tab(tab_lookup["Map"])
     tab_lookup["Profile"].write("Traveler profile details will live here.")
 
 
