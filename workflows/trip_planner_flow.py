@@ -8,6 +8,6 @@ def run_trip_pipeline(destination, dates, preferences):
     raw_data = researcher_task(destination, dates, preferences)
     filtered_data = taste_task(raw_data, preferences)
     calendar = planner_task(filtered_data, dates, preferences)
-    scenic_spots = vision_task(destination)
+    scenic_spots = vision_task(destination, preferences)
     summary = summary_task(calendar, scenic_spots, preferences)
     return summary
