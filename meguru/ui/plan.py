@@ -60,6 +60,17 @@ def _wizard_state() -> Dict[str, object]:
     return st.session_state[_WIZARD_KEY]
 
 
+def _handle_add_destination() -> None:
+    """Add a destination from the current text input to the wizard state."""
+
+    entry = st.session_state.get("plan_destination_entry", "")
+    cleaned = entry.strip()
+    wizard_state = _wizard_state()
+    if cleaned and cleaned not in wizard_state["destinations"]:
+        wizard_state["destinations"].append(cleaned)
+    st.session_state["plan_destination_entry"] = ""
+
+
 def _render_stepper(container, current_step: int) -> None:
     """Show a simple stepper indicator."""
 
@@ -81,17 +92,12 @@ def _render_destinations_step(container, state: Dict[str, object]) -> None:
         key="plan_destination_entry",
         placeholder="e.g. Kyoto",
     )
-    add_clicked = container.button(
+    container.button(
         "Add destination",
         key="plan_destination_add",
         use_container_width=True,
+        on_click=_handle_add_destination,
     )
-
-    if add_clicked:
-        cleaned = entry.strip()
-        if cleaned and cleaned not in state["destinations"]:
-            state["destinations"].append(cleaned)
-        st.session_state["plan_destination_entry"] = ""
 
     if state["destinations"]:
         container.markdown("**Selected destinations**")
