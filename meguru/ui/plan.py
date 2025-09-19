@@ -54,6 +54,7 @@ def ensure_plan_state() -> None:
     st.session_state.setdefault(_TRIP_INTENT_KEY, None)
     st.session_state.setdefault(_ITINERARY_KEY, None)
     st.session_state.setdefault(_PIPELINE_ERROR_KEY, None)
+    st.session_state.setdefault("plan_destination_entry_should_reset", False)
 
 
 def _wizard_state() -> Dict[str, object]:
@@ -68,7 +69,7 @@ def _handle_add_destination() -> None:
     wizard_state = _wizard_state()
     if cleaned and cleaned not in wizard_state["destinations"]:
         wizard_state["destinations"].append(cleaned)
-    st.session_state["plan_destination_entry"] = ""
+    st.session_state["plan_destination_entry_should_reset"] = True
 
 
 def _render_stepper(container, current_step: int) -> None:
@@ -87,6 +88,9 @@ def _render_stepper(container, current_step: int) -> None:
 
 def _render_destinations_step(container, state: Dict[str, object]) -> None:
     container.subheader("Where are you headed?")
+    if st.session_state.get("plan_destination_entry_should_reset"):
+        st.session_state["plan_destination_entry"] = ""
+        st.session_state["plan_destination_entry_should_reset"] = False
     entry = container.text_input(
         "Add a destination",
         key="plan_destination_entry",
