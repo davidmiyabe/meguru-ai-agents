@@ -8,11 +8,22 @@ from typing import Dict, List, Optional, Tuple
 
 import requests
 
-from meguru.core import db
+from meguru.core import db, google_stub
 from meguru.schemas import Place
 
 _GOOGLE_MAPS_BASE_URL = "https://maps.googleapis.com/maps/api"
 _DEFAULT_TIMEOUT = float(os.getenv("GOOGLE_MAPS_TIMEOUT", "10"))
+
+
+def _use_stub_responses() -> bool:
+    """Return ``True`` when the lightweight stub should service API calls."""
+
+    preference = (os.getenv("MEGURU_USE_GOOGLE_STUB") or "auto").strip().lower()
+    if preference in {"false", "0", "off", "no", "never"}:
+        return False
+    if preference in {"true", "1", "on", "yes", "always"}:
+        return True
+    return not os.getenv("GOOGLE_MAPS_API_KEY")
 
 
 class GoogleMapsError(RuntimeError):
@@ -27,6 +38,9 @@ def _api_key() -> str:
 
 
 def _request(path: str, params: Dict[str, object]) -> Dict[str, object]:
+    if _use_stub_responses():
+        return google_stub.request(path, params)
+
     params = {**params, "key": _api_key()}
     response = requests.get(
         f"{_GOOGLE_MAPS_BASE_URL.rstrip('/')}/{path.lstrip('/')}",
@@ -44,6 +58,9 @@ def _request(path: str, params: Dict[str, object]) -> Dict[str, object]:
 
 def find_places(query: str, location_bias: Optional[tuple[float, float]] = None) -> List[Dict[str, object]]:
     """Search for places using a free text query."""
+
+    if _use_stub_responses():
+        return google_stub.find_places(query, location_bias)
 
     params: Dict[str, object] = {"query": query}
     if location_bias:
@@ -106,6 +123,9 @@ def _place_ttl_hours() -> float:
 def place_details(place_id: str) -> Dict[str, object]:
     """Return the normalised details for a Google Place, using a database cache."""
 
+    if _use_stub_responses():
+        return google_stub.place_details(place_id)
+
     connection = db.get_connection()
     try:
         db.ensure_cache_table(connection)
@@ -156,6 +176,9 @@ def distance_matrix(
     mode: str = "walking",
 ) -> Dict[str, object]:
     """Call the Google Distance Matrix API."""
+
+    if _use_stub_responses():
+        return google_stub.distance_matrix(origins, destinations, mode)
 
     origin_param = "|".join(f"{lat},{lng}" for lat, lng in origins)
     destination_param = "|".join(f"{lat},{lng}" for lat, lng in destinations)
