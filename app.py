@@ -6,7 +6,7 @@ from typing import Sequence
 import streamlit as st
 from dotenv import load_dotenv
 
-from meguru.ui.plan import ensure_plan_state, render_itinerary_tab, render_plan_tab
+from meguru.ui import ensure_plan_state, render_itinerary_tab, render_plan_tab
 
 
 _TAB_ORDER: Sequence[str] = ("Plan", "Itinerary", "Map", "Profile")
