@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master", "develop", "dev"]
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "poetry"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install poetry
+          poetry install
+
+      - name: Run tests
+        id: pytest
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          poetry run pytest | tee pytest-output.txt
+          exit_code=${PIPESTATUS[0]}
+          echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on pull request
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const output = fs.readFileSync('pytest-output.txt', 'utf8');
+            const exitCode = '${{ steps.pytest.outputs.exit_code }}';
+            const status = exitCode === '0' ? '✅ Tests passed' : '❌ Tests failed';
+            const body = `${status}\n\n\`\`\`\n${output.substring(0, 65000)}\n\`\`\``;
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+      - name: Fail if tests failed
+        if: steps.pytest.outputs.exit_code != '0'
+        run: exit 1
