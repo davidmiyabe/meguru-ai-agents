@@ -8,8 +8,15 @@ from typing import Dict, List, Tuple
 import streamlit as st
 
 from meguru.agents.refiner import RefinerAgent
-from meguru.schemas import DayPlan, Itinerary, ItineraryEvent, RefinerRequest
+from meguru.core.exporters import itinerary_to_ics, itinerary_to_pdf
+from meguru.core.supabase_api import SupabaseClient
+from meguru.schemas import DayPlan, Itinerary, ItineraryEvent, RefinerRequest, TripIntent
 from meguru.ui.plan import _ITINERARY_KEY, _PIPELINE_ERROR_KEY, _TRIP_INTENT_KEY
+from meguru.ui.profile import (
+    SUPABASE_SESSION_KEY,
+    SUPABASE_TOKENS_KEY,
+    save_trip_to_profile,
+)
 
 _SWAP_CONTEXT_KEY = "_itinerary_swap_context"
 _SWAP_FEEDBACK_KEY = "_itinerary_swap_feedback"
@@ -396,6 +403,46 @@ def render_itinerary_tab(container) -> None:
 
         if itinerary.notes:
             st.markdown(itinerary.notes, unsafe_allow_html=True)
+
+        action_cols = st.columns(3)
+        has_session = bool(st.session_state.get(SUPABASE_SESSION_KEY) or st.session_state.get(SUPABASE_TOKENS_KEY))
+        supabase_configured = SupabaseClient.from_env() is not None
+        save_help = None
+        if supabase_configured and not has_session:
+            save_help = "Sign in from the Profile tab to sync this trip with Supabase."
+        save_clicked = action_cols[0].button(
+            "Save to profile",
+            key="itinerary_save_profile",
+            help=save_help,
+            use_container_width=True,
+        )
+        ics_data = itinerary_to_ics(itinerary, calendar_name=itinerary.destination or "Trip")
+        action_cols[1].download_button(
+            "Download ICS",
+            data=ics_data,
+            file_name=f"{(itinerary.destination or 'trip').replace(' ', '_')}.ics",
+            mime="text/calendar",
+            key="itinerary_download_ics",
+            use_container_width=True,
+        )
+        pdf_data = itinerary_to_pdf(itinerary)
+        action_cols[2].download_button(
+            "Download PDF",
+            data=pdf_data,
+            file_name=f"{(itinerary.destination or 'trip').replace(' ', '_')}.pdf",
+            mime="application/pdf",
+            key="itinerary_download_pdf",
+            use_container_width=True,
+        )
+
+        if save_clicked:
+            effective_intent = intent or TripIntent(destination=itinerary.destination or "Trip")
+            trip_name = itinerary.destination or effective_intent.destination or "Trip"
+            saved, error = save_trip_to_profile(effective_intent, itinerary, name=trip_name)
+            if error:
+                st.error(f"Unable to save trip: {error}")
+            elif saved:
+                st.success(f"Saved {saved.name} to your profile.")
 
         view_mode = st.radio(
             "Display",

@@ -19,6 +19,11 @@ except ModuleNotFoundError:  # pragma: no cover - handled gracefully in tests
     PGConnection = Any  # type: ignore[assignment]
 
 CACHE_TABLE_NAME = "api_cache"
+USERS_TABLE = "users"
+TRIPS_TABLE = "trips"
+ITINERARIES_TABLE = "itineraries"
+PLACES_TABLE = "places"
+EVENTS_TABLE = "events"
 
 
 def get_connection(dsn: Optional[str] = None) -> PGConnection:
@@ -53,6 +58,80 @@ def ensure_cache_table(connection: PGConnection) -> None:
                 key TEXT PRIMARY KEY,
                 value JSONB NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    connection.commit()
+
+
+def ensure_application_tables(connection: PGConnection) -> None:
+    """Create the application tables used for trip persistence if missing."""
+
+    with connection.cursor() as cursor:
+        cursor.execute('CREATE EXTENSION IF NOT EXISTS "pgcrypto"')
+        cursor.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {USERS_TABLE} (
+                id UUID PRIMARY KEY,
+                email TEXT UNIQUE,
+                full_name TEXT,
+                avatar_url TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        cursor.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {TRIPS_TABLE} (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES {USERS_TABLE}(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                destination TEXT,
+                start_date DATE,
+                end_date DATE,
+                trip_intent JSONB NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        cursor.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {ITINERARIES_TABLE} (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                trip_id UUID NOT NULL REFERENCES {TRIPS_TABLE}(id) ON DELETE CASCADE,
+                itinerary JSONB NOT NULL,
+                notes TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        cursor.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {PLACES_TABLE} (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                itinerary_id UUID NOT NULL REFERENCES {ITINERARIES_TABLE}(id) ON DELETE CASCADE,
+                place_id TEXT,
+                name TEXT,
+                data JSONB,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        cursor.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {EVENTS_TABLE} (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                itinerary_id UUID NOT NULL REFERENCES {ITINERARIES_TABLE}(id) ON DELETE CASCADE,
+                day_index INTEGER NOT NULL,
+                event_index INTEGER NOT NULL,
+                starts_at TIMESTAMP,
+                ends_at TIMESTAMP,
+                slot TEXT,
+                data JSONB NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
             """
         )
@@ -107,6 +186,7 @@ __all__ = [
     "CACHE_TABLE_NAME",
     "connection_ctx",
     "ensure_cache_table",
+    "ensure_application_tables",
     "get_cache_entry",
     "get_connection",
     "set_cache_entry",

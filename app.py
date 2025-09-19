@@ -11,6 +11,7 @@ from meguru.ui import (
     render_itinerary_tab,
     render_map_tab,
     render_plan_tab,
+    render_profile_tab,
 )
 
 
@@ -54,7 +55,7 @@ def render() -> None:
     render_plan_tab(tab_lookup["Plan"])
     render_itinerary_tab(tab_lookup["Itinerary"])
     render_map_tab(tab_lookup["Map"])
-    tab_lookup["Profile"].write("Traveler profile details will live here.")
+    render_profile_tab(tab_lookup["Profile"])
 
 
 if __name__ == "__main__":
