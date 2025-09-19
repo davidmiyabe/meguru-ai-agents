@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date, timedelta
 from typing import Dict, List, Tuple
 
@@ -30,6 +31,9 @@ _STEP_TITLES = [
     "Interests",
     "Notes",
 ]
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def ensure_plan_state() -> None:
@@ -312,6 +316,25 @@ def _build_trip_intent(state: Dict[str, object]) -> TripIntent:
     )
 
 
+def _format_pipeline_error(exc: Exception) -> str:
+    base_message = "Unable to generate the itinerary."
+    details = str(exc).strip()
+    if details:
+        lowered = details.lower()
+        if "google_maps_api_key" in lowered:
+            return (
+                f"{base_message} Add a Google Maps API key by setting the "
+                "GOOGLE_MAPS_API_KEY environment variable."
+            )
+        if "openai" in lowered and any(token in lowered for token in ("api key", "401", "unauthorized")):
+            return (
+                f"{base_message} Provide an OpenAI API key via the "
+                "OPENAI_API_KEY environment variable."
+            )
+        return f"{base_message} {details}"
+    return f"{base_message} Check your configuration and try again."
+
+
 def _handle_submit(state: Dict[str, object]) -> None:
     itinerary_placeholder = st.session_state[_ITINERARY_KEY]
     intent = _build_trip_intent(state)
@@ -320,9 +343,11 @@ def _handle_submit(state: Dict[str, object]) -> None:
         with st.spinner("Generating your itinerary..."):
             itinerary = run_trip_pipeline(intent)
     except Exception as exc:  # noqa: BLE001 - surfaced to the user
-        st.session_state[_PIPELINE_ERROR_KEY] = str(exc)
+        friendly_message = _format_pipeline_error(exc)
+        _LOGGER.exception("Trip pipeline failed")
+        st.session_state[_PIPELINE_ERROR_KEY] = friendly_message
         st.session_state[_ITINERARY_KEY] = itinerary_placeholder
-        st.error("Unable to generate the itinerary. Check your configuration and try again.")
+        st.error(friendly_message)
     else:
         st.session_state[_PIPELINE_ERROR_KEY] = None
         st.session_state[_ITINERARY_KEY] = itinerary
