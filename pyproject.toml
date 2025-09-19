@@ -1,0 +1,31 @@
+[project]
+name = "meguru"
+version = "0.1.0"
+description = "Meguru Streamlit application"
+readme = "README.md"
+requires-python = ">=3.11,<4.0"
+authors = [
+    { name = "Meguru AI", email = "engineering@example.com" },
+]
+dependencies = [
+    "streamlit>=1.34.0,<2.0.0",
+    "pydantic>=2.7.0,<3.0.0",
+    "requests>=2.31.0,<3.0.0",
+    "httpx>=0.27.0,<0.28.0",
+    "python-dotenv>=1.0.1,<2.0.0",
+    "psycopg2-binary>=2.9.9,<3.0.0",
+    "pandas>=2.2.1,<3.0.0",
+]
+
+[tool.poetry]
+packages = [
+    { include = "meguru" },
+]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.1.1"
+pytest-cov = "^4.1.0"
+
+[build-system]
+requires = ["poetry-core>=1.5.0"]
+build-backend = "poetry.core.masonry.api"
