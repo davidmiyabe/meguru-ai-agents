@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import time
 from typing import Dict, List, Tuple
 
@@ -12,11 +13,32 @@ from meguru.core.exporters import itinerary_to_ics, itinerary_to_pdf
 from meguru.core.supabase_api import SupabaseClient
 from meguru.schemas import DayPlan, Itinerary, ItineraryEvent, RefinerRequest, TripIntent
 from meguru.ui.plan import _ITINERARY_KEY, _PIPELINE_ERROR_KEY, _TRIP_INTENT_KEY
-from meguru.ui.profile import (
-    SUPABASE_SESSION_KEY,
-    SUPABASE_TOKENS_KEY,
-    save_trip_to_profile,
-)
+
+_LOGGER = logging.getLogger(__name__)
+
+_PROFILE_IMPORT_ERROR: Exception | None = None
+_PROFILE_FALLBACK_MESSAGE: str | None = None
+
+try:
+    from meguru.ui.profile import (
+        SUPABASE_SESSION_KEY,
+        SUPABASE_TOKENS_KEY,
+        save_trip_to_profile,
+    )
+except Exception as exc:  # pragma: no cover - exercised via targeted tests
+    _PROFILE_IMPORT_ERROR = exc
+    _PROFILE_FALLBACK_MESSAGE = (
+        "Profile features are temporarily unavailable. "
+        "Check the application logs for details: "
+        f"{exc}"
+    )
+    _LOGGER.warning("Profile module failed to import: %s", exc)
+
+    SUPABASE_SESSION_KEY = "_supabase_session"
+    SUPABASE_TOKENS_KEY = "_supabase_tokens"
+    save_trip_to_profile = None
+else:  # pragma: no cover - exercised when profile imports correctly
+    _PROFILE_FALLBACK_MESSAGE = None
 
 _SWAP_CONTEXT_KEY = "_itinerary_swap_context"
 _SWAP_FEEDBACK_KEY = "_itinerary_swap_feedback"
@@ -410,12 +432,20 @@ def render_itinerary_tab(container) -> None:
         save_help = None
         if supabase_configured and not has_session:
             save_help = "Sign in from the Profile tab to sync this trip with Supabase."
-        save_clicked = action_cols[0].button(
-            "Save to profile",
-            key="itinerary_save_profile",
-            help=save_help,
-            use_container_width=True,
-        )
+        if save_trip_to_profile:
+            save_clicked = action_cols[0].button(
+                "Save to profile",
+                key="itinerary_save_profile",
+                help=save_help,
+                use_container_width=True,
+            )
+        else:
+            save_clicked = False
+            message = _PROFILE_FALLBACK_MESSAGE or (
+                "Profile features are temporarily unavailable. "
+                "Check the application logs for details."
+            )
+            action_cols[0].info(message)
         ics_data = itinerary_to_ics(itinerary, calendar_name=itinerary.destination or "Trip")
         action_cols[1].download_button(
             "Download ICS",
@@ -435,7 +465,7 @@ def render_itinerary_tab(container) -> None:
             use_container_width=True,
         )
 
-        if save_clicked:
+        if save_clicked and save_trip_to_profile:
             effective_intent = intent or TripIntent(destination=itinerary.destination or "Trip")
             trip_name = itinerary.destination or effective_intent.destination or "Trip"
             saved, error = save_trip_to_profile(effective_intent, itinerary, name=trip_name)
