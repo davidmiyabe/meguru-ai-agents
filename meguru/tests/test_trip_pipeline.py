@@ -72,6 +72,8 @@ def _patch_pipeline_agents(
     *,
     research_calls: Dict[str, int],
     prompt_versions: Optional[Dict[str, str]] = None,
+    planner_destination: Optional[str] = None,
+    use_real_planner: bool = False,
 ) -> None:
     prompt_versions = prompt_versions or {
         "intake": "intake.stub",
@@ -103,17 +105,6 @@ def _patch_pipeline_agents(
         def run(self, trip_intent: TripIntent, corpus: ResearchCorpus) -> TasteProfile:
             return _build_taste_profile()
 
-    class DummyPlannerAgent:
-        prompt_version = prompt_versions["planner"]
-
-        def run(
-            self,
-            trip_intent: TripIntent,
-            taste_profile: TasteProfile,
-            corpus: ResearchCorpus,
-        ) -> Itinerary:
-            return _build_itinerary(trip_intent.destination)
-
     class DummySummaryAgent:
         prompt_version = prompt_versions["summary"]
 
@@ -123,7 +114,25 @@ def _patch_pipeline_agents(
     monkeypatch.setattr(trip_pipeline, "IntakeAgent", DummyIntakeAgent)
     monkeypatch.setattr(trip_pipeline, "ResearcherAgent", DummyResearcherAgent)
     monkeypatch.setattr(trip_pipeline, "TasteAgent", DummyTasteAgent)
-    monkeypatch.setattr(trip_pipeline, "PlannerAgent", DummyPlannerAgent)
+    if not use_real_planner:
+        class DummyPlannerAgent:
+            prompt_version = prompt_versions["planner"]
+
+            def run(
+                self,
+                trip_intent: TripIntent,
+                taste_profile: TasteProfile,
+                corpus: ResearchCorpus,
+            ) -> Itinerary:
+                destination = planner_destination
+                if destination is None:
+                    destination = trip_intent.destination
+                itinerary = _build_itinerary(destination)
+                if not itinerary.destination:
+                    itinerary.destination = trip_intent.destination
+                return itinerary
+
+        monkeypatch.setattr(trip_pipeline, "PlannerAgent", DummyPlannerAgent)
     monkeypatch.setattr(trip_pipeline, "SummaryAgent", DummySummaryAgent)
 
 
@@ -140,6 +149,33 @@ def test_run_trip_pipeline_returns_enriched_itinerary(monkeypatch: pytest.Monkey
     assert itinerary.days, "Pipeline should return at least one day"
     assert len(itinerary.days[0].events) >= 3
     assert itinerary.notes == SUMMARY_HTML
+    assert research_calls["count"] == 1
+
+
+def test_pipeline_assigns_destination_from_intent_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trip_pipeline.clear_research_cache()
+    research_calls: Dict[str, int] = {}
+    _patch_pipeline_agents(
+        monkeypatch,
+        research_calls=research_calls,
+        use_real_planner=True,
+    )
+
+    def fake_call_llm_and_validate(*_, **__) -> Itinerary:
+        return Itinerary.model_validate({"days": []})
+
+    monkeypatch.setattr(
+        "meguru.agents.planner.call_llm_and_validate",
+        fake_call_llm_and_validate,
+    )
+
+    intent = TripIntent(destination="Kyoto", interests=["culture"])
+
+    itinerary = trip_pipeline.run_trip_pipeline(intent)
+
+    assert itinerary.destination == "Kyoto"
     assert research_calls["count"] == 1
 
 

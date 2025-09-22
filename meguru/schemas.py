@@ -178,7 +178,7 @@ class DayPlan(BaseModel):
 class Itinerary(BaseModel):
     """Structured multi-day trip plan."""
 
-    destination: str
+    destination: str = Field(default="")
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     days: List[DayPlan] = Field(default_factory=list)
