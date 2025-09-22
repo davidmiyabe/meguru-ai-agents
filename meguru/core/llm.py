@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Sequence
@@ -15,6 +16,9 @@ DEFAULT_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0"))
 DEFAULT_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))
 _MAX_TOKENS_ENV = os.getenv("LLM_MAX_TOKENS")
 DEFAULT_MAX_TOKENS: Optional[int] = int(_MAX_TOKENS_ENV) if _MAX_TOKENS_ENV else None
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _clean_dict(payload: MutableMapping[str, Any]) -> Dict[str, Any]:
@@ -66,11 +70,17 @@ class LLMClient:
             "temperature": temperature if temperature is not None else self.temperature,
             "max_tokens": max_tokens if max_tokens is not None else self.max_tokens,
             "stop": list(stop) if stop else None,
-            "metadata": {"prompt_version": prompt_version},
+            "user": prompt_version,
             "response_format": {"type": "json_object"} if force_json else None,
         }
 
         payload = _clean_dict(payload)
+
+        _LOGGER.debug(
+            "Calling chat completion model %s [prompt_version=%s]",
+            payload["model"],
+            prompt_version,
+        )
 
         request_timeout = timeout if timeout is not None else self.timeout
         headers = {"Content-Type": "application/json"}
