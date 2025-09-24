@@ -2,7 +2,14 @@ from datetime import date, time
 
 from meguru.core.exporters import itinerary_to_ics, itinerary_to_pdf
 from meguru.core.profile_store import InMemoryProfileStore
-from meguru.schemas import DayPlan, Itinerary, ItineraryEvent, Place, TripIntent
+from meguru.schemas import (
+    DayPlan,
+    Itinerary,
+    ItineraryEvent,
+    Place,
+    ResearchCorpus,
+    TripIntent,
+)
 
 
 def _sample_trip() -> tuple[TripIntent, Itinerary]:
@@ -59,6 +66,47 @@ def test_itinerary_accepts_wrapped_payloads():
     assert itinerary.destination == "Tokyo"
     assert itinerary.days[0].events[0].title.startswith("Tsukiji")
 
+
+def test_research_corpus_accepts_missing_place_ids():
+    corpus = ResearchCorpus.model_validate(
+        {
+            "lodging": [
+                {
+                    "name": "Omni Los Angeles Hotel at California Plaza",
+                    "address": "251 S Olive St, Los Angeles, CA 90012",
+                    "description": "Upscale stay in downtown LA.",
+                    "highlights": "Located in the heart of the city.",
+                    "tags": "romantic, downtown",
+                }
+            ],
+            "dining": [
+                {
+                    "name": "Perch",
+                    "address": "448 S Hill St, Los Angeles, CA 90013",
+                    "summary": "Rooftop French-inspired restaurant.",
+                    "highlights": [
+                        "Great skyline views",
+                        "Live music on weekends",
+                    ],
+                }
+            ],
+            "experiences": [],
+        }
+    )
+
+    lodging = corpus.lodgings[0]
+    assert lodging.place_id.startswith("generated-")
+    assert lodging.highlights == ["Located in the heart of the city."]
+    assert lodging.tags == ["romantic", "downtown"]
+    assert lodging.place and lodging.place.name == "Omni Los Angeles Hotel at California Plaza"
+    assert (
+        lodging.place.formatted_address
+        == "251 S Olive St, Los Angeles, CA 90012"
+    )
+
+    dining = corpus.dining[0]
+    assert dining.place_id.startswith("generated-")
+    assert dining.place and dining.place.formatted_address.startswith("448 S Hill")
 
 def test_itinerary_to_ics_contains_events():
     _, itinerary = _sample_trip()
