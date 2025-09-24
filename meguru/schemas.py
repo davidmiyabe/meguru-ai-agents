@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, time
 import re
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Sequence
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
@@ -170,6 +170,57 @@ class ResearchItem(BaseModel):
 
 class ResearchCorpus(BaseModel):
     """Curated set of researched places grouped by theme."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalise_research_buckets(cls, data: object) -> object:
+        """Coerce loose LLM structures into canonical research buckets."""
+
+        if not isinstance(data, dict):
+            return data
+
+        payload = dict(data)
+
+        def _normalise_bucket(keys: Sequence[str]) -> None:
+            canonical_key = keys[0]
+            source_key = None
+            for key in keys:
+                if key in payload:
+                    source_key = key
+                    break
+
+            if source_key is None:
+                return
+
+            raw_items = payload.get(source_key)
+
+            if raw_items is None:
+                normalised_items: List[object] = []
+            elif isinstance(raw_items, dict):
+                normalised_items = [raw_items]
+            elif isinstance(raw_items, (list, tuple, set)):
+                normalised_items = list(raw_items)
+            else:
+                normalised_items = [raw_items]
+
+            cleaned_items: List[object] = []
+            for item in normalised_items:
+                if isinstance(item, dict):
+                    cleaned_items.append(ResearchItem._coerce_llm_variants(item))
+                else:
+                    cleaned_items.append(item)
+
+            payload[canonical_key] = cleaned_items
+
+            for alias in keys:
+                if alias != canonical_key:
+                    payload.pop(alias, None)
+
+        _normalise_bucket(("lodgings", "lodging", "stays"))
+        _normalise_bucket(("dining", "restaurants", "food"))
+        _normalise_bucket(("experiences", "activities", "things_to_do"))
+
+        return payload
 
     lodgings: List[ResearchItem] = Field(
         default_factory=list,
