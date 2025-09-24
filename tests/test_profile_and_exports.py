@@ -33,6 +33,33 @@ def _sample_trip() -> tuple[TripIntent, Itinerary]:
     return intent, itinerary
 
 
+def test_itinerary_accepts_wrapped_payloads():
+    itinerary = Itinerary.model_validate(
+        {
+            "itinerary": {
+                "trip": {
+                    "destination": "Tokyo",
+                    "days": [
+                        {
+                            "label": "Day 1",
+                            "events": [
+                                {
+                                    "title": "Tsukiji Outer Market breakfast",
+                                    "start_time": "08:30",
+                                    "end_time": "10:00",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            }
+        }
+    )
+
+    assert itinerary.destination == "Tokyo"
+    assert itinerary.days[0].events[0].title.startswith("Tsukiji")
+
+
 def test_itinerary_to_ics_contains_events():
     _, itinerary = _sample_trip()
     ics_data = itinerary_to_ics(itinerary, calendar_name="Kyoto Adventure")
