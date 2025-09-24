@@ -108,7 +108,6 @@ def test_research_corpus_accepts_missing_place_ids():
     assert dining.place_id.startswith("generated-")
     assert dining.place and dining.place.formatted_address.startswith("448 S Hill")
 
-
 def test_itinerary_to_ics_contains_events():
     _, itinerary = _sample_trip()
     ics_data = itinerary_to_ics(itinerary, calendar_name="Kyoto Adventure")
