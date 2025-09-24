@@ -279,8 +279,10 @@ class Itinerary(BaseModel):
 
         candidate = data
         for key in ("itinerary", "trip"):
-            nested = candidate.get(key)
-            if isinstance(nested, dict):
+            while isinstance(candidate, dict):
+                nested = candidate.get(key)
+                if not isinstance(nested, dict):
+                    break
                 candidate = nested
 
         return candidate
