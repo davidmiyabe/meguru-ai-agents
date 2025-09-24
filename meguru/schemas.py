@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import date, time
+import re
 from typing import Dict, Iterable, List, Optional
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PositiveInt
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 
 class Place(BaseModel):
@@ -60,6 +61,15 @@ class TripIntent(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+def _slugify(value: str) -> str:
+    """Generate a deterministic, URL-friendly slug."""
+
+    value = value.strip().lower()
+    value = re.sub(r"[^a-z0-9]+", "-", value)
+    value = re.sub(r"-+", "-", value)
+    return value.strip("-")
+
+
 class ResearchItem(BaseModel):
     """A researched place annotated for later stages."""
 
@@ -81,6 +91,81 @@ class ResearchItem(BaseModel):
         default_factory=list,
         validation_alias=AliasChoices("tags", "themes"),
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_llm_variants(cls, data: object) -> object:
+        """Normalise common deviations produced by the researcher LLM."""
+
+        if not isinstance(data, dict):
+            return data
+
+        payload = dict(data)
+
+        def _ensure_list(keys: Iterable[str]) -> None:
+            for key in keys:
+                if key not in payload:
+                    continue
+                value = payload[key]
+                if isinstance(value, str):
+                    parts = [part.strip() for part in re.split(r"[\n,]+", value) if part.strip()]
+                    payload[key] = parts
+                elif isinstance(value, tuple):
+                    payload[key] = list(value)
+
+        _ensure_list(["highlights", "reasons", "why"])
+        _ensure_list(["tags", "themes"])
+
+        place_data = payload.get("place") if isinstance(payload.get("place"), dict) else {}
+        place_data = dict(place_data) if place_data else {}
+
+        for source_key, target_key in (
+            ("name", "name"),
+            ("address", "formatted_address"),
+            ("formatted_address", "formatted_address"),
+        ):
+            if source_key in payload and payload[source_key]:
+                place_data.setdefault(target_key, payload.pop(source_key))
+
+        if place_data:
+            if "address" in place_data and "formatted_address" not in place_data:
+                place_data["formatted_address"] = place_data.pop("address")
+            payload["place"] = place_data
+
+        if not payload.get("place_id"):
+            candidate_id = None
+            if isinstance(payload.get("place"), dict):
+                candidate_id = payload["place"].get("place_id")
+
+            if not candidate_id:
+                slug_parts: List[str] = []
+                place = payload.get("place") or {}
+                if isinstance(place, dict):
+                    if place.get("name"):
+                        slug_parts.append(str(place["name"]))
+                    if place.get("formatted_address"):
+                        slug_parts.append(str(place["formatted_address"]))
+
+                summary = payload.get("summary") or payload.get("description")
+                if summary and not slug_parts:
+                    slug_parts.append(str(summary))
+
+                if not slug_parts and isinstance(payload.get("highlights"), list):
+                    highlights = [item for item in payload["highlights"] if isinstance(item, str) and item.strip()]
+                    if highlights:
+                        slug_parts.append(highlights[0])
+
+                if slug_parts:
+                    slug = _slugify(" ".join(slug_parts))
+                    if slug:
+                        candidate_id = f"generated-{slug}"
+
+            if candidate_id:
+                payload["place_id"] = candidate_id
+                if isinstance(payload.get("place"), dict) and not payload["place"].get("place_id"):
+                    payload["place"]["place_id"] = candidate_id
+
+        return payload
 
 
 class ResearchCorpus(BaseModel):
@@ -183,6 +268,22 @@ class Itinerary(BaseModel):
     end_date: Optional[date] = None
     days: List[DayPlan] = Field(default_factory=list)
     notes: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _unwrap_common_wrappers(cls, data: object) -> object:
+        """Support common nesting variants returned by the LLM."""
+
+        if not isinstance(data, dict):
+            return data
+
+        candidate = data
+        for key in ("itinerary", "trip"):
+            nested = candidate.get(key)
+            if isinstance(nested, dict):
+                candidate = nested
+
+        return candidate
 
     def all_events(self) -> Iterable[ItineraryEvent]:
         for day in self.days:
