@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, time
 from typing import Dict, Iterable, List, Optional
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PositiveInt
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 
 class Place(BaseModel):
@@ -183,6 +183,22 @@ class Itinerary(BaseModel):
     end_date: Optional[date] = None
     days: List[DayPlan] = Field(default_factory=list)
     notes: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _unwrap_common_wrappers(cls, data: object) -> object:
+        """Support common nesting variants returned by the LLM."""
+
+        if not isinstance(data, dict):
+            return data
+
+        candidate = data
+        for key in ("itinerary", "trip"):
+            nested = candidate.get(key)
+            if isinstance(nested, dict):
+                candidate = nested
+
+        return candidate
 
     def all_events(self) -> Iterable[ItineraryEvent]:
         for day in self.days:
