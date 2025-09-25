@@ -310,8 +310,47 @@ class ItineraryEvent(BaseModel):
     place_id: Optional[str] = None
     start_time: Optional[time] = None
     end_time: Optional[time] = None
+    duration_minutes: Optional[int] = Field(
+        default=None,
+        ge=0,
+        validation_alias=AliasChoices(
+            "duration_minutes",
+            "duration",
+            "estimated_duration_minutes",
+            "estimated_duration",
+        ),
+    )
+    category: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("category", "type", "slot", "kind"),
+    )
+    location: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "location",
+            "venue",
+            "where",
+            "meeting_point",
+        ),
+    )
+    justification: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("justification", "why", "reason", "rationale"),
+    )
     tags: List[str] = Field(default_factory=list)
     place: Optional[Place] = None
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def _normalise_category(cls, value: object) -> Optional[str]:
+        if not isinstance(value, str):
+            return value  # type: ignore[return-value]
+        candidate = value.strip()
+        if not candidate:
+            return None
+        normalised = candidate.lower().replace("-", "_")
+        normalised = re.sub(r"\s+", "_", normalised)
+        return normalised
 
 
 class DayPlan(BaseModel):
