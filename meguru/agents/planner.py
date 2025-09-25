@@ -20,7 +20,11 @@ class PlannerAgent:
 
     system_prompt = (
         "You are a meticulous travel planner. Create a paced itinerary that respects "
-        "opening hours and reasonable travel distances. Respond with JSON conforming to the "
+        "opening hours and reasonable travel distances. Provide chronologically ordered "
+        "events that include start_time, end_time when possible, duration_minutes, location, "
+        "and a brief justification. Use the event category field to denote the slot "
+        "(wake_up, breakfast, morning_activity, snack_morning, lunch, afternoon_activity, "
+        "snack_afternoon, dinner, evening_activity). Respond with JSON conforming to the "
         "Itinerary schema."
     )
     prompt_version = "planner.v1"
@@ -63,8 +67,16 @@ class PlannerAgent:
         prompt = (
             "Design a day-by-day itinerary that balances activity pace, observes opening hours, "
             "and minimises unnecessary backtracking.\n"
-            "Include descriptive summaries for each day and ensure activities map back to the "
-            "ranked places when relevant.\n"
+            "For each day, produce a cohesive theme (store this in the day summary) and a full "
+            "schedule covering wake-up, breakfast, morning activity, optional morning snack, "
+            "lunch, afternoon activity, optional afternoon snack, dinner, and optional evening "
+            "activity.\n"
+            "Populate each itinerary event with: category (one of the slots listed above), "
+            "start_time in 24-hour HH:MM format, duration_minutes, end_time when known, a "
+            "clear title, the location or place_id, and a short justification explaining why "
+            "it suits the traveller preferences.\n"
+            "If a researched place aligns, reference it by place_id; otherwise include a free-"
+            "text location. Keep meal stops distinctive from activities.\n"
             "\n"
             "# Planning Context\n"
             f"{format_prompt_data(prompt_payload)}\n"
