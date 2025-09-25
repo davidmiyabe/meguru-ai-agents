@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
-from datetime import date, time
+from datetime import date, datetime, time
 import re
 from typing import Dict, Iterable, List, Optional, Sequence
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PositiveInt, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    PositiveInt,
+    field_validator,
+    model_validator,
+)
 
 
 class Place(BaseModel):
@@ -314,6 +322,31 @@ class DayPlan(BaseModel):
     summary: Optional[str] = None
     pace: Optional[str] = None
     events: List[ItineraryEvent] = Field(default_factory=list)
+
+    @field_validator("date", mode="before")
+    @classmethod
+    def _coerce_date(cls, value: object) -> Optional[date]:
+        """Normalise loose LLM date representations to real dates."""
+
+        if value is None:
+            return None
+
+        if isinstance(value, date):
+            return value
+
+        if isinstance(value, datetime):
+            return value.date()
+
+        if isinstance(value, str):
+            candidate = value.strip()
+            if not candidate:
+                return None
+            try:
+                return date.fromisoformat(candidate)
+            except ValueError:
+                return value
+
+        return value
 
 
 class Itinerary(BaseModel):
