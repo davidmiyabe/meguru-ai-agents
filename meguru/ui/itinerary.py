@@ -47,6 +47,20 @@ _SWAP_SUCCESS_KEY = "_itinerary_swap_success"
 _VIEW_STATE_KEY = "_itinerary_view_mode"
 SELECTED_SLOT_KEY = "_itinerary_selected_slot"
 
+_CATEGORY_DISPLAY: Tuple[Tuple[str, str, bool], ...] = (
+    ("wake_up", "Wake-up", False),
+    ("breakfast", "Breakfast", False),
+    ("morning_activity", "Morning activity", False),
+    ("snack_morning", "Morning snack", True),
+    ("lunch", "Lunch", False),
+    ("afternoon_activity", "Afternoon activity", False),
+    ("snack_afternoon", "Afternoon snack", True),
+    ("dinner", "Dinner", False),
+    ("evening_activity", "Evening activity", True),
+)
+
+_CATEGORY_LABELS = {key: label for key, label, _ in _CATEGORY_DISPLAY}
+
 _SCHEDULE_SLOTS: Tuple[str, ...] = (
     "Morning",
     "Lunch",
@@ -159,19 +173,36 @@ def _event_primary_label(event: ItineraryEvent) -> str:
     return event.title
 
 
-def _event_secondary_lines(event: ItineraryEvent) -> List[str]:
-    lines: List[str] = []
+def _event_detail_pairs(event: ItineraryEvent) -> List[Tuple[str, str]]:
+    details: List[Tuple[str, str]] = []
+
+    time_range = _format_time_range(event)
+    if time_range:
+        details.append(("Time", time_range))
+
+    if event.duration_minutes and (not time_range or "·" not in time_range):
+        details.append(("Estimated duration", f"{event.duration_minutes} min"))
+
+    location_parts: List[str] = []
     if event.location:
-        lines.append(event.location)
+        location_parts.append(event.location)
+
     if event.place and event.place.formatted_address:
-        lines.append(event.place.formatted_address)
+        location_parts.append(event.place.formatted_address)
+    if location_parts:
+        joined_location = " · ".join(dict.fromkeys(location_parts))
+        details.append(("Location", joined_location))
+
     if event.description:
-        lines.append(event.description)
+        details.append(("Details", event.description))
+
     if event.justification:
-        lines.append(event.justification)
-    if event.duration_minutes:
-        lines.append(f"Estimated duration: {event.duration_minutes} min")
-    return lines
+        details.append(("Why", event.justification))
+
+    if event.tags:
+        details.append(("Tags", ", ".join(event.tags)))
+
+    return details
 
 
 def _open_swap(day_index: int, event_index: int) -> None:
@@ -224,7 +255,13 @@ def _build_schedule(day: DayPlan) -> Dict[str, List[Tuple[int, ItineraryEvent]]]
     return buckets
 
 
-def _render_list_event(day_index: int, event_index: int, event: ItineraryEvent) -> None:
+def _render_list_event(
+    day_index: int,
+    event_index: int,
+    event: ItineraryEvent,
+    *,
+    slot_label: str | None = None,
+) -> None:
     selected_slot = st.session_state.get(SELECTED_SLOT_KEY)
     is_selected = selected_slot == (day_index, event_index)
 
@@ -245,13 +282,13 @@ def _render_list_event(day_index: int, event_index: int, event: ItineraryEvent) 
         details_col, action_col = st.columns([4, 1])
         with details_col:
             primary = _event_primary_label(event)
-            time_range = _format_time_range(event)
-            header = f"**{primary}**"
-            if time_range:
-                header += f" · {time_range}"
+            if slot_label:
+                header = f"**{slot_label}:** {primary}"
+            else:
+                header = f"**{primary}**"
             st.markdown(header)
-            for line in _event_secondary_lines(event):
-                st.caption(line)
+            for label, value in _event_detail_pairs(event):
+                st.caption(f"**{label}:** {value}")
         action_col.button(
             "Swap this",
             key=f"swap_list_{day_index}_{event_index}",
@@ -268,13 +305,14 @@ def _render_schedule_event(
     column, day_index: int, event_index: int, event: ItineraryEvent
 ) -> None:
     primary = _event_primary_label(event)
-    time_range = _format_time_range(event)
-    body = f"**{primary}**"
-    if time_range:
-        body += f" · {time_range}"
+    slot_label = _CATEGORY_LABELS.get(event.category) if event.category else None
+    if slot_label:
+        body = f"**{slot_label}:** {primary}"
+    else:
+        body = f"**{primary}**"
     column.markdown(body)
-    for line in _event_secondary_lines(event):
-        column.caption(line)
+    for label, value in _event_detail_pairs(event):
+        column.caption(f"**{label}:** {value}")
     column.button(
         "Swap this",
         key=f"swap_schedule_{day_index}_{event_index}",
@@ -289,18 +327,43 @@ def _render_list_view(itinerary: Itinerary) -> None:
         label = _day_label(day)
         with st.expander(label, expanded=True):
             if day.summary:
-                st.caption(day.summary)
+                st.markdown(f"**Theme of the day:** {day.summary}")
+
             if not day.events:
                 st.info("No activities planned for this day yet.")
+
+            events_by_category: Dict[str, List[Tuple[int, ItineraryEvent]]] = {}
+            uncategorised: List[Tuple[int, ItineraryEvent]] = []
             for event_index, event in enumerate(day.events):
-                _render_list_event(day_index, event_index, event)
+                if event.category and event.category in _CATEGORY_LABELS:
+                    events_by_category.setdefault(event.category, []).append((event_index, event))
+                else:
+                    uncategorised.append((event_index, event))
+
+            for category, slot_label, is_optional in _CATEGORY_DISPLAY:
+                category_events = events_by_category.get(category, [])
+                if category_events:
+                    for event_index, event in category_events:
+                        _render_list_event(
+                            day_index,
+                            event_index,
+                            event,
+                            slot_label=slot_label,
+                        )
+                elif not is_optional:
+                    st.caption(f"**{slot_label}:** To be decided.")
+
+            if uncategorised:
+                st.markdown("**Additional plans**")
+                for event_index, event in uncategorised:
+                    _render_list_event(day_index, event_index, event)
 
 
 def _render_schedule_view(itinerary: Itinerary) -> None:
     for day_index, day in enumerate(itinerary.days):
         st.markdown(f"#### {_day_label(day)}")
         if day.summary:
-            st.caption(day.summary)
+            st.markdown(f"**Theme of the day:** {day.summary}")
 
         schedule = _build_schedule(day)
         columns = st.columns(len(_SCHEDULE_SLOTS), gap="medium")
@@ -388,13 +451,14 @@ def _render_swap_modal(itinerary: Itinerary) -> None:
     with st.modal("Swap itinerary activity"):
         st.markdown(f"### {_day_label(day)}")
         primary = _event_primary_label(event)
-        time_range = _format_time_range(event)
-        context_line = f"Currently scheduled: **{primary}**"
-        if time_range:
-            context_line += f" · {time_range}"
+        slot_label = _CATEGORY_LABELS.get(event.category) if event.category else None
+        if slot_label:
+            context_line = f"Currently scheduled: **{slot_label}:** {primary}"
+        else:
+            context_line = f"Currently scheduled: **{primary}**"
         st.write(context_line)
-        for line in _event_secondary_lines(event):
-            st.caption(line)
+        for label, value in _event_detail_pairs(event):
+            st.caption(f"**{label}:** {value}")
 
         st.text_area(
             "What would you prefer instead?",
