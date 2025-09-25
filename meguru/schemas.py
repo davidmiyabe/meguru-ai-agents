@@ -132,14 +132,16 @@ class ResearchItem(BaseModel):
                 place_data["formatted_address"] = place_data.pop("address")
             payload["place"] = place_data
 
+        place_payload = payload.get("place") if isinstance(payload.get("place"), dict) else None
+
         if not payload.get("place_id"):
             candidate_id = None
-            if isinstance(payload.get("place"), dict):
-                candidate_id = payload["place"].get("place_id")
+            if isinstance(place_payload, dict):
+                candidate_id = place_payload.get("place_id")
 
             if not candidate_id:
                 slug_parts: List[str] = []
-                place = payload.get("place") or {}
+                place = place_payload or {}
                 if isinstance(place, dict):
                     if place.get("name"):
                         slug_parts.append(str(place["name"]))
@@ -162,8 +164,11 @@ class ResearchItem(BaseModel):
 
             if candidate_id:
                 payload["place_id"] = candidate_id
-                if isinstance(payload.get("place"), dict) and not payload["place"].get("place_id"):
-                    payload["place"]["place_id"] = candidate_id
+                place_payload = payload.get("place") if isinstance(payload.get("place"), dict) else None
+                if isinstance(place_payload, dict) and not place_payload.get("place_id"):
+                    place_payload["place_id"] = candidate_id
+        elif isinstance(place_payload, dict) and not place_payload.get("place_id"):
+            place_payload["place_id"] = payload["place_id"]
 
         return payload
 
