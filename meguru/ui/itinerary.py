@@ -186,6 +186,7 @@ def _event_detail_pairs(event: ItineraryEvent) -> List[Tuple[str, str]]:
     location_parts: List[str] = []
     if event.location:
         location_parts.append(event.location)
+
     if event.place and event.place.formatted_address:
         location_parts.append(event.place.formatted_address)
     if location_parts:
