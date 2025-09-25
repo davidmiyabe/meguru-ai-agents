@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, time
 from typing import Dict, Optional
 
 import pytest
@@ -53,15 +53,85 @@ def _build_itinerary(destination: str) -> Itinerary:
         days=[
             DayPlan(
                 label="Day 1",
+                summary="Cultural immersion and flavours",
                 events=[
-                    ItineraryEvent(title="Breakfast at cafe", place_id="dine-1"),
-                    ItineraryEvent(title="Morning walk", place_id="exp-1"),
-                    ItineraryEvent(title="Afternoon temple", place_id="exp-2"),
+                    ItineraryEvent(
+                        title="Wake up refreshed",
+                        category="wake_up",
+                        start_time=time(7, 0),
+                        duration_minutes=30,
+                        description="Light stretching and hydration at your hotel.",
+                        justification="Gives you time to acclimate before breakfast.",
+                    ),
+                    ItineraryEvent(
+                        title="Breakfast at cafe",
+                        category="breakfast",
+                        start_time=time(7, 30),
+                        duration_minutes=60,
+                        place_id="dine-1",
+                        description="Savour seasonal pastries and coffee.",
+                        justification="Highly rated spot that aligns with your love of food adventures.",
+                    ),
+                    ItineraryEvent(
+                        title="Morning walk",
+                        category="morning_activity",
+                        start_time=time(9, 0),
+                        duration_minutes=90,
+                        place_id="exp-1",
+                        description="Stroll the historic streets and capture photos.",
+                        justification="Showcases Kyoto's culture at a relaxed pace.",
+                    ),
+                    ItineraryEvent(
+                        title="Lunch at Nishiki Market",
+                        category="lunch",
+                        start_time=time(12, 30),
+                        duration_minutes=75,
+                        location="Nishiki Market Food Stalls",
+                        description="Sample local bites and sweets.",
+                        justification="An ideal way to graze through Kyoto specialities.",
+                    ),
+                    ItineraryEvent(
+                        title="Afternoon temple",
+                        category="afternoon_activity",
+                        start_time=time(14, 30),
+                        duration_minutes=120,
+                        place_id="exp-2",
+                        description="Explore Kiyomizu-dera's wooden terrace.",
+                        justification="Iconic landmark that fits your cultural interests.",
+                    ),
+                    ItineraryEvent(
+                        title="Dinner tasting menu",
+                        category="dinner",
+                        start_time=time(19, 0),
+                        duration_minutes=90,
+                        place_id="dine-1",
+                        description="Multi-course kaiseki-inspired meal.",
+                        justification="Celebrates Kyoto flavours in an intimate setting.",
+                    ),
                 ],
             ),
             DayPlan(
                 label="Day 2",
-                events=[ItineraryEvent(title="Museum visit", place_id="exp-3")],
+                summary="Art and design inspirations",
+                events=[
+                    ItineraryEvent(
+                        title="Wake slowly",
+                        category="wake_up",
+                        start_time=time(8, 0),
+                        duration_minutes=30,
+                        description="Gentle start with tea in your room.",
+                        justification="Keeps the day relaxed after a big first day.",
+                    ),
+                    ItineraryEvent(
+                        title="Museum visit",
+                        category="morning_activity",
+                        start_time=time(10, 0),
+                        duration_minutes=120,
+                        place_id="exp-3",
+                        description="Discover modern art installations.",
+                        justification="Matches your interest in design and creativity.",
+                    ),
+                ],
             ),
         ],
     )

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import textwrap
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 from typing import Iterable, List, Optional
 
@@ -51,15 +51,30 @@ def itinerary_to_ics(itinerary: Itinerary, *, calendar_name: Optional[str] = Non
             if event.title and event.title not in summary_parts:
                 summary_parts.append(event.title)
             summary = summary_parts[0] if summary_parts else event.title or "Activity"
-            start_dt = datetime.combine(base_date, event.start_time) if event.start_time else None
-            end_dt = datetime.combine(base_date, event.end_time) if event.end_time else None
+            start_dt = (
+                datetime.combine(base_date, event.start_time)
+                if event.start_time
+                else None
+            )
+            end_dt = (
+                datetime.combine(base_date, event.end_time) if event.end_time else None
+            )
+            duration_delta = (
+                timedelta(minutes=event.duration_minutes)
+                if event.duration_minutes
+                else None
+            )
+            if start_dt and not end_dt and duration_delta:
+                end_dt = start_dt + duration_delta
+            elif end_dt and not start_dt and duration_delta:
+                start_dt = end_dt - duration_delta
             if not start_dt and not end_dt:
                 start_dt = datetime.combine(base_date, datetime.min.time())
                 end_dt = start_dt + timedelta(hours=1)
             elif start_dt and not end_dt:
-                end_dt = start_dt + timedelta(hours=1)
+                end_dt = start_dt + (duration_delta or timedelta(hours=1))
             elif end_dt and not start_dt:
-                start_dt = end_dt - timedelta(hours=1)
+                start_dt = end_dt - (duration_delta or timedelta(hours=1))
 
             lines.append("BEGIN:VEVENT")
             lines.append(f"UID:{uid}@meguru.ai")
@@ -69,8 +84,19 @@ def itinerary_to_ics(itinerary: Itinerary, *, calendar_name: Optional[str] = Non
             if end_dt:
                 lines.append(f"DTEND:{_format_dt(end_dt)}")
             lines.append(f"SUMMARY:{_escape_ics_text(summary)}")
+            description_parts: List[str] = []
             if event.description:
-                lines.append(f"DESCRIPTION:{_escape_ics_text(event.description)}")
+                description_parts.append(event.description)
+            if event.justification:
+                description_parts.append(event.justification)
+            if event.duration_minutes and not event.end_time:
+                description_parts.append(
+                    f"Estimated duration: {event.duration_minutes} minutes"
+                )
+            if description_parts:
+                lines.append(
+                    f"DESCRIPTION:{_escape_ics_text(' '.join(description_parts))}"
+                )
             if event.place and event.place.formatted_address:
                 lines.append(f"LOCATION:{_escape_ics_text(event.place.formatted_address)}")
             lines.append("END:VEVENT")
@@ -132,12 +158,31 @@ def itinerary_to_pdf(itinerary: Itinerary) -> bytes:
             for wrapped in _wrap_lines(day.summary, 90):
                 write_line(f"  {wrapped}")
         for event in day.events:
-            time_range = []
+            computed_end = event.end_time
+            if (
+                event.start_time
+                and not computed_end
+                and event.duration_minutes
+            ):
+                base = datetime.combine(date.today(), event.start_time)
+                computed_end = (base + timedelta(minutes=event.duration_minutes)).time()
+            time_range: List[str] = []
             if event.start_time:
                 time_range.append(event.start_time.strftime("%H:%M"))
-            if event.end_time:
-                time_range.append(event.end_time.strftime("%H:%M"))
+            if computed_end:
+                time_range.append(computed_end.strftime("%H:%M"))
             range_text = "-".join(time_range)
+            if not range_text and event.duration_minutes:
+                range_text = f"~{event.duration_minutes} min"
+            elif (
+                event.start_time
+                and event.duration_minutes
+                and not event.end_time
+            ):
+                range_text = (
+                    f"{event.start_time.strftime('%H:%M')} "
+                    f"({event.duration_minutes} min)"
+                )
             label_parts = []
             if event.place and event.place.name:
                 label_parts.append(event.place.name)
@@ -151,8 +196,15 @@ def itinerary_to_pdf(itinerary: Itinerary) -> bytes:
             if event.description:
                 for wrapped in _wrap_lines(event.description, 84):
                     write_line(f"    {wrapped}")
+            if event.location:
+                write_line(f"    {event.location}")
             if event.place and event.place.formatted_address:
                 write_line(f"    {event.place.formatted_address}")
+            if event.justification:
+                for wrapped in _wrap_lines(event.justification, 84):
+                    write_line(f"    {wrapped}")
+            if event.duration_minutes:
+                write_line(f"    Estimated duration: {event.duration_minutes} min")
         cursor_y -= line_height // 2
 
     content_stream = "\n".join(content_lines).encode("utf-8")

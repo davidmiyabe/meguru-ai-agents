@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import time
+from datetime import datetime, time, timedelta
 from typing import Dict, List, Tuple
 
 import streamlit as st
@@ -54,6 +54,18 @@ _SCHEDULE_SLOTS: Tuple[str, ...] = (
     "Dinner",
     "Evening",
 )
+
+_CATEGORY_SLOT_OVERRIDES: Dict[str, str] = {
+    "wake_up": "Morning",
+    "breakfast": "Morning",
+    "morning_activity": "Morning",
+    "snack_morning": "Morning",
+    "lunch": "Lunch",
+    "afternoon_activity": "Afternoon",
+    "snack_afternoon": "Afternoon",
+    "dinner": "Dinner",
+    "evening_activity": "Evening",
+}
 
 _SLOT_KEYWORDS: Dict[str, str] = {
     "breakfast": "Morning",
@@ -108,14 +120,28 @@ def _format_time(value: time | None) -> str:
 
 
 def _format_time_range(event: ItineraryEvent) -> str:
+    computed_end: time | None = event.end_time
+    if (
+        event.start_time
+        and not computed_end
+        and event.duration_minutes is not None
+        and event.duration_minutes > 0
+    ):
+        base = datetime.combine(datetime.today().date(), event.start_time)
+        computed_end = (base + timedelta(minutes=event.duration_minutes)).time()
+
     start = _format_time(event.start_time)
-    end = _format_time(event.end_time)
+    end = _format_time(computed_end)
     if start and end:
         return f"{start}–{end}"
     if start:
+        if event.duration_minutes:
+            return f"{start} · {event.duration_minutes} min"
         return start
     if end:
         return end
+    if event.duration_minutes:
+        return f"~{event.duration_minutes} min"
     return ""
 
 
@@ -135,10 +161,16 @@ def _event_primary_label(event: ItineraryEvent) -> str:
 
 def _event_secondary_lines(event: ItineraryEvent) -> List[str]:
     lines: List[str] = []
+    if event.location:
+        lines.append(event.location)
     if event.place and event.place.formatted_address:
         lines.append(event.place.formatted_address)
     if event.description:
         lines.append(event.description)
+    if event.justification:
+        lines.append(event.justification)
+    if event.duration_minutes:
+        lines.append(f"Estimated duration: {event.duration_minutes} min")
     return lines
 
 
@@ -158,6 +190,8 @@ def _close_swap() -> None:
 
 
 def _infer_schedule_slot(event: ItineraryEvent, fallback_index: int) -> str:
+    if event.category and event.category in _CATEGORY_SLOT_OVERRIDES:
+        return _CATEGORY_SLOT_OVERRIDES[event.category]
     if event.start_time:
         start_time = event.start_time
         for slot_name, window_start, window_end in _SLOT_TIME_WINDOWS:
