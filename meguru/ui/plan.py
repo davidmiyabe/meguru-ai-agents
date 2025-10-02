@@ -97,6 +97,18 @@ _EXPERIENCE_CARDS: List[_ExperienceCard] = [
 ]
 
 
+
+
+def _save_custom_interest(state: Dict[str, object]) -> None:
+    """Persist a custom interest from the Streamlit text input."""
+
+    entry = st.session_state.get("plan_custom_interest_entry", "")
+    cleaned = entry.strip()
+    if cleaned and cleaned not in state["custom_interests"]:
+        state["custom_interests"].append(cleaned)
+    st.session_state["plan_custom_interest_entry"] = ""
+
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -374,16 +386,17 @@ def _render_interest_gallery(container, state: Dict[str, object]) -> None:
             elif not saved and card["id"] in state["saved_cards"]:
                 state["saved_cards"].remove(card["id"])
 
-    custom_interest = container.text_input(
+    container.text_input(
         "Add your own must-do (press enter to keep it)",
         key="plan_custom_interest_entry",
         placeholder="Vinyl record shops, rooftop yoga, tiny bookstores…",
     )
-    if container.button("Save custom interest", key="plan_add_custom_interest"):
-        cleaned = custom_interest.strip()
-        if cleaned and cleaned not in state["custom_interests"]:
-            state["custom_interests"].append(cleaned)
-        st.session_state["plan_custom_interest_entry"] = ""
+    container.button(
+        "Save custom interest",
+        key="plan_add_custom_interest",
+        on_click=_save_custom_interest,
+        kwargs={"state": state},
+    )
 
     if state["custom_interests"]:
         container.write(
