@@ -91,6 +91,30 @@ def _extract_group_size(text: str) -> Optional[int]:
     return None
 
 
+def _coerce_positive_int(value: object) -> Optional[int]:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, float) and value.is_integer():
+        numeric = int(value)
+        return numeric if numeric > 0 else None
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        try:
+            numeric = int(cleaned)
+        except ValueError:
+            return None
+        return numeric if numeric > 0 else None
+    try:
+        numeric = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return numeric if numeric > 0 else None
+
+
 _VIBE_KEYWORDS = {
     "night": "Nightlife",
     "club": "Nightlife",
@@ -259,7 +283,7 @@ class Listener:
     )
     prompt_version = "plan.listener.v1"
 
-    _required_fields = ["destination", "timing", "vibe", "travel_pace", "budget"]
+    _required_fields = ["destination", "timing", "vibe", "travel_pace", "budget", "group"]
 
     def run(
         self,
@@ -409,6 +433,11 @@ class Listener:
             return str(context.get("travel_pace", "")).strip() in _PACE_OPTIONS
         if field == "budget":
             return str(context.get("budget", "")).strip() in _BUDGET_OPTIONS
+        if field == "group":
+            group_type = str(context.get("group_type", "")).strip()
+            if group_type:
+                return True
+            return _coerce_positive_int(context.get("group_size")) is not None
         return False
 
     def _detect_missing_fields(
