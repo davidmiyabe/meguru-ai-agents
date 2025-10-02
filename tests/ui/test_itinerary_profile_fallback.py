@@ -115,7 +115,7 @@ class _FakeStreamlit:
     def spinner(self, *args: Any, **kwargs: Any):  # noqa: ARG002
         return nullcontext()
 
-    def experimental_rerun(self) -> None:
+    def rerun(self) -> None:
         return None
 
 

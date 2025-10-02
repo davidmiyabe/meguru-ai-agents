@@ -454,7 +454,7 @@ def _handle_swap_request(
     )
     st.session_state[_SWAP_SUCCESS_KEY] = success_message
     _close_swap()
-    st.experimental_rerun()
+    st.rerun()
 
 
 def _render_swap_modal(itinerary: Itinerary) -> None:
@@ -506,7 +506,7 @@ def _render_swap_modal(itinerary: Itinerary) -> None:
         actions = st.columns(2)
         if actions[0].button("Cancel", key="swap_cancel"):
             _close_swap()
-            st.experimental_rerun()
+            st.rerun()
             return
 
         if actions[1].button("Request swap", type="primary", key="swap_submit"):
