@@ -177,18 +177,62 @@ def _extract_timing(text: str) -> Optional[str]:
     return None
 
 
+_DESTINATION_STOP_WORDS = {
+    "in",
+    "for",
+    "with",
+    "during",
+    "over",
+    "around",
+    "through",
+    "while",
+    "when",
+    "because",
+    "since",
+    "after",
+    "before",
+    "on",
+    "at",
+    "by",
+    "from",
+    "this",
+    "next",
+    "the",
+    "a",
+    "an",
+    "my",
+    "our",
+    "his",
+    "her",
+    "their",
+}
+
+
 def _guess_destination(text: str) -> Optional[str]:
-    if not text.strip():
+    stripped = text.strip()
+    if not stripped:
         return None
-    pattern = re.compile(r"(?:to|in|around|for)\s+([A-Za-z][A-Za-z\s\-']{2,})")
-    match = pattern.search(text)
+
+    pattern = re.compile(r"(?:to|in|around|for)\s+([A-Za-z][A-Za-z\s\-']{2,})", re.IGNORECASE)
+    match = pattern.search(stripped)
     if match:
         candidate = match.group(1).strip()
-        return candidate.title()
-    cleaned = text.strip()
-    tokens = cleaned.split()
+        tokens: List[str] = []
+        for raw_token in candidate.split():
+            cleaned = raw_token.strip(" ,.;:!?")
+            if not cleaned:
+                continue
+            lowered = cleaned.lower()
+            if lowered in _DESTINATION_STOP_WORDS and tokens:
+                break
+            tokens.append(cleaned)
+        candidate = " ".join(tokens).strip("- ,")
+        if candidate:
+            return candidate.title()
+
+    tokens = stripped.split()
     if 1 <= len(tokens) <= 4:
-        return cleaned.title()
+        return stripped.title()
     return None
 
 
