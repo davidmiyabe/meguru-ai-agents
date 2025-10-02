@@ -379,8 +379,8 @@ def _ensure_conversation_intro(state: Dict[str, object]) -> None:
         return
     conversation.pop("gallery_message_index", None)
     intro = (
-        "I'm all ears—tell me about the trip you're dreaming up and I'll start sculpting "
-        "the brief. Drop the crew, timing, and the vibe and I'll fill in the rest."
+        "Hey there! ✨ Where are we headed? Start me with the destination, then fill me in "
+        "on the crew, timing, and the vibe so I can sculpt the brief."
     )
     messages.append({"role": "assistant", "content": intro})
 
@@ -517,7 +517,9 @@ def _render_conversation(container, state: Dict[str, object]) -> None:
             if role == "assistant":
                 _render_scene(st, state, message, index=index)
 
-    user_text = st.chat_input("Tell me what's essential for this trip…")
+    user_text = st.chat_input(
+        "Start with the destination, then sprinkle in the crew, timing, and vibe…"
+    )
     if user_text:
         _run_plan_action(state, {"type": "message", "text": user_text}, container=container)
 
