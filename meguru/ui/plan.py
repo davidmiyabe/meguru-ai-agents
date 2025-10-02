@@ -595,24 +595,6 @@ def _render_cinematic_intro(container, state: Dict[str, object]) -> None:
     container.caption("Start the conversation below—destination, crew, vibes, I'm listening.")
 
 
-def _render_conversation_transcript(container, state: Dict[str, object]) -> None:
-    try:
-        messages = list(_conversation_log(state))
-    except Exception:  # pragma: no cover - defensive fallback
-        conversation = state.get("conversation") if isinstance(state.get("conversation"), dict) else {}
-        messages = list(conversation.get("messages", []))
-    if not messages:
-        return
-
-    container.subheader("Trip setup recap")
-    transcript_area = container.container()
-    for message in messages:
-        role = message.get("role", "assistant")
-        content = message.get("content", "")
-        with transcript_area.chat_message(role):
-            st.markdown(content)
-
-
 def _render_interest_gallery(container, state: Dict[str, object]) -> None:
     destination = state.get("destination") or "your trip"
     container.markdown(
@@ -988,7 +970,6 @@ def render_plan_tab(container) -> None:
     state = _wizard_state()
 
     with container:
-        transcript_area = st.container()
         body_area = st.container()
 
         scene = str(state.get("scene") or "conversation")
@@ -996,9 +977,6 @@ def render_plan_tab(container) -> None:
         if scene not in {"conversation", "interests", "review", "welcome"}:
             scene = "conversation"
             state["scene"] = scene
-
-        if scene in {"interests", "review"}:
-            _render_conversation_transcript(transcript_area, state)
 
         if scene == "welcome":
             _render_cinematic_intro(body_area, state)
