@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, List, Mapping, MutableMapping, Sequence
+from typing import Any, Dict, List, Mapping, MutableMapping, Sequence
 
 from meguru.agents import (
     Clarifier,
@@ -149,22 +149,78 @@ class PlanConversationWorkflow:
                 if isinstance(details, Mapping):
                     catalog[str(card_id)] = dict(details)
 
+        PlanConversationWorkflow._refresh_activity_collections(state)
+
     @staticmethod
     def _has_prioritised_activity(state: Mapping[str, Any]) -> bool:
+        if state.get("saved_inspirations") or state.get("liked_inspirations"):
+            return True
         return bool(state.get("liked_cards") or state.get("saved_cards"))
 
     @staticmethod
-    def _collect_activity_details(state: Mapping[str, Any]) -> List[Mapping[str, Any]]:
+    def _refresh_activity_collections(state: MutableMapping[str, Any]) -> None:
         catalog: Mapping[str, Mapping[str, Any]] = state.get("_activity_catalog", {}) or {}
+
+        def _collect(
+            card_ids: List[str],
+            *,
+            priority: str,
+            existing: Dict[str, Mapping[str, Any]],
+        ) -> List[Dict[str, Any]]:
+            collected: List[Dict[str, Any]] = []
+            for card_id in card_ids:
+                details: Mapping[str, Any] | None = catalog.get(card_id)
+                if not details:
+                    details = existing.get(card_id)
+                if not details:
+                    details = {"id": card_id}
+                payload = dict(details)
+                payload.setdefault("id", card_id)
+                payload.setdefault("priority", priority)
+                collected.append(payload)
+            return collected
+
+        existing_saved = {
+            str(item.get("id")): item
+            for item in state.get("saved_inspirations", [])
+            if isinstance(item, Mapping) and item.get("id")
+        }
+        existing_liked = {
+            str(item.get("id")): item
+            for item in state.get("liked_inspirations", [])
+            if isinstance(item, Mapping) and item.get("id")
+        }
+
+        state["saved_inspirations"] = _collect(
+            [str(card_id) for card_id in state.get("saved_cards", [])],
+            priority="saved",
+            existing=existing_saved,
+        )
+        state["liked_inspirations"] = _collect(
+            [str(card_id) for card_id in state.get("liked_cards", [])],
+            priority="liked",
+            existing=existing_liked,
+        )
+
+    @staticmethod
+    def _collect_activity_details(state: Mapping[str, Any]) -> List[Mapping[str, Any]]:
         ordered: List[Mapping[str, Any]] = []
-        for card_id in state.get("saved_cards", []):
-            details = catalog.get(card_id)
-            if details:
-                ordered.append(details)
-        for card_id in state.get("liked_cards", []):
-            details = catalog.get(card_id)
-            if details and details not in ordered:
-                ordered.append(details)
+        seen_ids: set[str] = set()
+
+        for entry in state.get("saved_inspirations", []) or []:
+            if isinstance(entry, Mapping):
+                card_id = str(entry.get("id") or entry.get("title") or "")
+                if card_id and card_id not in seen_ids:
+                    ordered.append(dict(entry))
+                    seen_ids.add(card_id)
+
+        for entry in state.get("liked_inspirations", []) or []:
+            if isinstance(entry, Mapping):
+                card_id = str(entry.get("id") or entry.get("title") or "")
+                if card_id and card_id not in seen_ids:
+                    ordered.append(dict(entry))
+                    seen_ids.add(card_id)
+
         return ordered
 
     @staticmethod

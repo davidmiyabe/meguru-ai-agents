@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, timedelta
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Mapping, Optional, Tuple, TypedDict
 
 import streamlit as st
 
@@ -139,6 +139,55 @@ def _card_payload(card_id: str) -> Dict[str, Any]:
     return dict(details)
 
 
+def _sync_activity_preferences(state: Dict[str, object]) -> None:
+    """Ensure the planner state keeps full payloads for liked and saved cards."""
+
+    catalog: Mapping[str, Mapping[str, Any]] = (
+        state.get("_activity_catalog", {}) or {}
+    )  # type: ignore[assignment]
+
+    existing_liked = {
+        str(item.get("id")): item
+        for item in state.get("liked_inspirations", [])
+        if isinstance(item, Mapping) and item.get("id")
+    }
+    existing_saved = {
+        str(item.get("id")): item
+        for item in state.get("saved_inspirations", [])
+        if isinstance(item, Mapping) and item.get("id")
+    }
+
+    def _collect(
+        card_ids: List[str],
+        *,
+        priority: str,
+        existing: Dict[str, Mapping[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        collected: List[Dict[str, Any]] = []
+        for card_id in card_ids:
+            details: Mapping[str, Any] | None = catalog.get(card_id)  # type: ignore[arg-type]
+            if not details:
+                details = existing.get(card_id)
+            if not details:
+                details = _card_payload(card_id)
+            payload = dict(details)
+            payload.setdefault("id", card_id)
+            payload.setdefault("priority", priority)
+            collected.append(payload)
+        return collected
+
+    state["saved_inspirations"] = _collect(
+        [str(card_id) for card_id in state.get("saved_cards", [])],
+        priority="saved",
+        existing=existing_saved,
+    )
+    state["liked_inspirations"] = _collect(
+        [str(card_id) for card_id in state.get("liked_cards", [])],
+        priority="liked",
+        existing=existing_liked,
+    )
+
+
 def _run_plan_action(
     state: Dict[str, object],
     action: Dict[str, Any],
@@ -246,6 +295,9 @@ def ensure_plan_state() -> None:
             "timing_note": None,
             "liked_cards": [],
             "saved_cards": [],
+            "liked_inspirations": [],
+            "saved_inspirations": [],
+            "_activity_catalog": {},
             "personal_events": [],
             "share_public": True,
             "share_caption": "",
@@ -392,6 +444,8 @@ def _render_interest_gallery(container, state: Dict[str, object]) -> None:
     for card_id in previous_saves - current_saves:
         _run_plan_action(state, {"type": "unsave_activity", "card": _card_payload(card_id)})
 
+    _sync_activity_preferences(state)
+
     container.text_input(
         "Add your own must-do (press enter to keep it)",
         key="plan_custom_interest_entry",
@@ -531,13 +585,41 @@ def _build_trip_intent(state: Dict[str, object]) -> TripIntent:
         duration_days = (end_date - start_date).days + 1
 
     interests_set = set(state.get("vibe", [])) | set(state.get("custom_interests", []))
-    liked_cards = set(state.get("liked_cards", []))
-    saved_cards = set(state.get("saved_cards", []))
-    for card in _EXPERIENCE_CARDS:
-        if card["id"] in liked_cards or card["id"] in saved_cards:
-            interests_set.add(card["category"])
-            if card["id"] in saved_cards:
-                interests_set.add(card["title"])
+
+    saved_payloads: List[Dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for payload in state.get("saved_inspirations", []):
+        if not isinstance(payload, Mapping):
+            continue
+        card_id = str(payload.get("id") or payload.get("title") or "").strip()
+        if not card_id or card_id in seen_ids:
+            continue
+        entry = dict(payload)
+        entry.setdefault("id", card_id)
+        saved_payloads.append(entry)
+        seen_ids.add(card_id)
+
+    liked_payloads: List[Dict[str, Any]] = []
+    for payload in state.get("liked_inspirations", []):
+        if not isinstance(payload, Mapping):
+            continue
+        card_id = str(payload.get("id") or payload.get("title") or "").strip()
+        if not card_id or card_id in seen_ids:
+            continue
+        entry = dict(payload)
+        entry.setdefault("id", card_id)
+        liked_payloads.append(entry)
+        seen_ids.add(card_id)
+
+    for payload in saved_payloads + liked_payloads:
+        category = payload.get("category")
+        if category:
+            interests_set.add(str(category))
+
+    for payload in saved_payloads:
+        title = payload.get("title")
+        if title:
+            interests_set.add(str(title))
 
     notes_segments: List[str] = []
     if state.get("flexible_months"):
@@ -567,6 +649,14 @@ def _build_trip_intent(state: Dict[str, object]) -> TripIntent:
 
     combined_notes = "\n".join(notes_segments) if notes_segments else None
 
+    must_do = sorted(
+        {
+            str(item.get("title") or item.get("id"))
+            for item in saved_payloads
+            if isinstance(item, dict) and (item.get("title") or item.get("id"))
+        }
+    )
+
     return TripIntent(
         destination=destination,
         start_date=start_date if isinstance(start_date, date) else None,
@@ -575,7 +665,10 @@ def _build_trip_intent(state: Dict[str, object]) -> TripIntent:
         travel_pace=str(state.get("travel_pace")) if state.get("travel_pace") else None,
         budget=str(state.get("budget")) if state.get("budget") else None,
         interests=sorted(interests_set),
+        must_do=must_do,
         notes=combined_notes,
+        saved_inspirations=saved_payloads,
+        liked_inspirations=liked_payloads,
     )
 
 
@@ -606,6 +699,8 @@ def _handle_submit(state: Dict[str, object]) -> bool:
     if not state.get("destination"):
         st.warning("Add a destination first.")
         return False
+
+    _sync_activity_preferences(state)
 
     try:
         intent = _build_trip_intent(state)
