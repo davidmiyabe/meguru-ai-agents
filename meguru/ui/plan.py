@@ -183,7 +183,33 @@ _EVENT_KEYWORDS = {
 
 
 def _normalise_signal(value: object) -> str:
+    if value is None:
+        return ""
     return str(value).strip().lower()
+
+
+def _coerce_positive_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, float) and value.is_integer():
+        numeric = int(value)
+        return numeric if numeric > 0 else None
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        try:
+            numeric = int(cleaned)
+        except ValueError:
+            return None
+        return numeric if numeric > 0 else None
+    try:
+        numeric = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return numeric if numeric > 0 else None
 
 
 def _infer_duration_bucket(state: Mapping[str, object]) -> str | None:
@@ -239,7 +265,7 @@ def _score_card(card: _ExperienceCard, state: Mapping[str, object]) -> float:
     else:
         score += 0.5
 
-    pace = _normalise_signal(state.get("travel_pace", ""))
+    pace = _normalise_signal(state.get("travel_pace"))
     if pace:
         card_pace = {
             _normalise_signal(item)
@@ -251,7 +277,7 @@ def _score_card(card: _ExperienceCard, state: Mapping[str, object]) -> float:
         elif card_pace:
             score += 0.4
 
-    budget = _normalise_signal(state.get("budget", ""))
+    budget = _normalise_signal(state.get("budget"))
     if budget:
         card_budget = {
             _normalise_signal(item)
@@ -304,14 +330,16 @@ def _collect_active_tags(state: Mapping[str, object]) -> List[str]:
         if isinstance(vibe, str) and vibe.strip():
             tags.append(_normalise_signal(vibe))
 
-    pace = _normalise_signal(state.get("travel_pace", ""))
-    if pace:
-        label = _PACE_TAG_LABELS.get(pace, pace)
+    pace_value = state.get("travel_pace")
+    pace = _normalise_signal(pace_value)
+    if pace and isinstance(pace_value, str):
+        label = _PACE_TAG_LABELS.get(pace, str(pace_value))
         tags.append(label)
 
-    budget = _normalise_signal(state.get("budget", ""))
-    if budget:
-        label = _BUDGET_TAG_LABELS.get(budget, budget)
+    budget_value = state.get("budget")
+    budget = _normalise_signal(budget_value)
+    if budget and isinstance(budget_value, str):
+        label = _BUDGET_TAG_LABELS.get(budget, str(budget_value))
         tags.append(label)
 
     note_text = " ".join(
@@ -521,10 +549,10 @@ def ensure_plan_state() -> None:
             "start_date": None,
             "end_date": None,
             "flexible_months": [],
-            "group_type": _GROUP_TYPES[1],
-            "group_size": 2,
-            "travel_pace": _PACE_OPTIONS[1],
-            "budget": _BUDGET_OPTIONS[1],
+            "group_type": None,
+            "group_size": None,
+            "travel_pace": None,
+            "budget": None,
             "vibe": [],
             "custom_interests": [],
             "notes": "",
@@ -808,9 +836,14 @@ def _render_review(container, state: Dict[str, object]) -> None:
         ]
         bullets.append("Timing: flexible across " + ", ".join(month_labels))
 
-    bullets.append(
-        f"Crew: {state.get('group_type', 'Travelers')} (x{int(state.get('group_size', 1))})"
-    )
+    group_type = state.get("group_type")
+    group_size_int = _coerce_positive_int(state.get("group_size"))
+    if group_type:
+        size_suffix = f" (x{group_size_int})" if group_size_int else ""
+        bullets.append(f"Crew: {group_type}{size_suffix}")
+    elif group_size_int:
+        bullets.append(f"Crew size: x{group_size_int}")
+
     if intent.travel_pace:
         bullets.append(f"Pace: {intent.travel_pace}")
     if intent.budget:
@@ -932,9 +965,12 @@ def _build_trip_intent(state: Dict[str, object]) -> TripIntent:
         notes_segments.append(f"Timing note: {timing_note}")
 
     group_type = state.get("group_type")
-    group_size = state.get("group_size")
+    group_size_int = _coerce_positive_int(state.get("group_size"))
     if group_type:
-        notes_segments.append(f"Group: {group_type} ({int(group_size or 1)} travellers)")
+        size_note = f" ({group_size_int} travellers)" if group_size_int else ""
+        notes_segments.append(f"Group: {group_type}{size_note}")
+    elif group_size_int:
+        notes_segments.append(f"Group size: {group_size_int} travellers")
 
     if state.get("personal_events"):
         notes_segments.append(
