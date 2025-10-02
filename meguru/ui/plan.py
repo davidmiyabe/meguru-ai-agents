@@ -368,7 +368,7 @@ def _render_interest_gallery(container, state: Dict[str, object]) -> None:
     for idx, card in enumerate(_EXPERIENCE_CARDS):
         target = columns[idx % len(columns)]
         with target:
-            st.image(card["image_url"], use_column_width=True)
+            st.image(card["image_url"], use_container_width=True)
             st.markdown(f"**{card['title']}**")
             st.caption(card["description"])
             st.caption(f"_{card['location_hint']}_")
