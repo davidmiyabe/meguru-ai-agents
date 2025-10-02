@@ -571,6 +571,10 @@ def _format_pipeline_error(exc: Exception) -> str:
                 f"{base_message} Provide an OpenAI API key via the "
                 "OPENAI_API_KEY environment variable."
             )
+        if "429" in lowered or "too many requests" in lowered:
+            return (
+                f"{base_message} The OpenAI API rate limit was hit. Wait a moment and try again."
+            )
         return f"{base_message} {details}"
     return f"{base_message} Check your configuration and try again."
 
