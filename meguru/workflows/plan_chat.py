@@ -79,6 +79,9 @@ class PlanConversationWorkflow:
         conversation = self.ensure_conversation(state)
         pending_fields: Sequence[str] = list(conversation.get("pending_fields", []))
 
+        ready_before = self.ready_for_gallery(state)
+        prioritised_before = self._has_prioritised_activity(state)
+
         listener_result = self.listener.run(
             action_json=json.dumps(action),
             context=state,
@@ -86,6 +89,9 @@ class PlanConversationWorkflow:
         )
 
         self._apply_updates(state, listener_result.context_updates)
+
+        ready_after = self.ready_for_gallery(state)
+        prioritised_after = self._has_prioritised_activity(state)
 
         remaining_pending = [
             field for field in pending_fields if field not in listener_result.resolved_fields
@@ -104,6 +110,30 @@ class PlanConversationWorkflow:
         conversation["pending_fields"] = remaining_pending
 
         curator_draft = self.curator.run(listener_result, state)
+
+        call_to_actions: List[str] = []
+        if curator_draft.call_to_action:
+            existing_cta = curator_draft.call_to_action.strip()
+            if existing_cta:
+                call_to_actions.append(existing_cta)
+
+        if not ready_before and ready_after:
+            call_to_actions.append("Want to see some ideas now? I can open the inspiration gallery.")
+
+        if (
+            listener_result.trigger_planning
+            and prioritised_after
+            and not prioritised_before
+        ):
+            call_to_actions.append(
+                "Ready for me to spin these picks into an itinerary preview? Just give me the cue."
+            )
+
+        if call_to_actions:
+            curator_draft.call_to_action = " ".join(call_to_actions)
+        else:
+            curator_draft.call_to_action = None
+
         styled = self.stylist.run(curator_draft, state.get("vibe", []))
         update.assistant_chunks.extend(styled.chunks)
 
