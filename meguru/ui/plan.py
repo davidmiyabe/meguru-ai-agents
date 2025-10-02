@@ -654,14 +654,26 @@ def _render_activity_cards(container, state: Dict[str, object]) -> None:
     _sync_activity_preferences(state)
 
 
-def _render_interest_gallery(container, state: Dict[str, object]) -> None:
-    destination = state.get("destination") or "your trip"
-    container.markdown(
-        f"""
-        ### Curate the vibe for {destination}
-        Tap ❤️ to teach Meguru what you love and 🔖 to save it straight into your moodboard.
-        """
+def _gallery_micro_intro(destination: object) -> str | None:
+    """Compose a brief cinematic line for the gallery scene."""
+
+    if destination:
+        subject = str(destination).strip()
+    else:
+        subject = "this journey"
+
+    if not subject:
+        subject = "this journey"
+
+    return (
+        f"A quick montage over {subject}—neon glow, dawn horizons, and moments waiting to be claimed."
     )
+
+
+def _render_interest_gallery(container, state: Dict[str, object]) -> None:
+    intro = _gallery_micro_intro(state.get("destination"))
+    if intro:
+        container.markdown(f"_{intro}_")
 
     if container.button("Back to questions", key="plan_back_conversation"):
         state["scene"] = "conversation"
@@ -711,11 +723,6 @@ def _render_interest_gallery(container, state: Dict[str, object]) -> None:
         success = _handle_submit(state)
         if success:
             return
-
-    container.caption(
-        "Want to tweak something? Head back to the questions or keep liking cards for a different mix."
-    )
-
 
 def _render_pending_requirements(
     container, state: Mapping[str, object], *, emphasise: bool
