@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple, TypedDict
 import streamlit as st
 
 from meguru.schemas import TripIntent
-from meguru.workflows import PlanConversationWorkflow
+from meguru.workflows import PlanConversationUpdate, PlanConversationWorkflow
 from meguru.workflows.trip_pipeline import run_trip_pipeline
 
 _WIZARD_KEY = "_plan_wizard_state"
@@ -342,9 +342,14 @@ def _conversation_log(state: Dict[str, object]) -> List[Dict[str, str]]:
 
 
 def _ensure_conversation_intro(state: Dict[str, object]) -> None:
-    messages = _conversation_log(state)
+    conversation = PlanConversationWorkflow.ensure_conversation(state)
+    messages = conversation.get("messages")
+    if not isinstance(messages, list):
+        conversation["messages"] = []
+        messages = conversation["messages"]
     if messages:
         return
+    conversation.pop("gallery_message_index", None)
     intro = (
         "I'm all ears—tell me about the trip you're dreaming up and I'll start sculpting "
         "the brief. Drop the crew, timing, and the vibe and I'll fill in the rest."
@@ -417,6 +422,7 @@ def _run_plan_action(
     workflow = _workflow()
     update = workflow.process_action(state, action)
     messages = _conversation_log(state)
+    conversation = state.get("conversation") or {}
 
     if update.user_message:
         messages.append({"role": "user", "content": update.user_message})
@@ -436,7 +442,31 @@ def _run_plan_action(
             assembled_chunks.extend(update.assistant_chunks)
 
         combined = "\n\n".join(assembled_chunks)
-        messages.append({"role": "assistant", "content": combined})
+        scene = _resolve_scene(conversation, state, update)
+        payload: Dict[str, Any] = {"role": "assistant", "content": combined}
+        if scene:
+            payload["scene"] = scene
+        messages.append(payload)
+        if scene == "gallery":
+            conversation.setdefault("gallery_message_index", len(messages) - 1)
+
+
+def _resolve_scene(
+    conversation: Mapping[str, Any],
+    state: Mapping[str, Any],
+    update: PlanConversationUpdate,
+) -> str | None:
+    if getattr(update, "clarifier_active", False):
+        return "clarifier"
+
+    pending = conversation.get("pending_fields") if isinstance(conversation, Mapping) else None
+    if pending:
+        return "pending"
+
+    if PlanConversationWorkflow.ready_for_gallery(state):
+        return "gallery"
+
+    return None
 
 
 def _render_conversation(container, state: Dict[str, object]) -> None:
@@ -451,56 +481,17 @@ def _render_conversation(container, state: Dict[str, object]) -> None:
         intro_container = container.container()
         _render_cinematic_intro(intro_container, state)
 
-    if PlanConversationWorkflow.ready_for_gallery(state) and not conversation.get(
-        "ready_for_gallery_prompted",
-    ):
-        _conversation_log(state).append(
-            {
-                "role": "assistant",
-                "content": "I think I’ve got a vibe… want to see what I’m imagining?",
-                "variant": "ready_for_gallery_prompt",
-            }
-        )
-        conversation["ready_for_gallery_prompted"] = True
-
     for index, message in enumerate(messages):
         role = message.get("role", "assistant")
         content = message.get("content", "")
-        variant = message.get("variant")
         with container.chat_message(role):
             st.markdown(content)
-            if variant == "ready_for_gallery_prompt":
-                show_col, tweak_col = st.columns(2)
-                if show_col.button(
-                    "Show me the inspiration",
-                    key=f"plan_ready_gallery_{index}_show",
-                    type="primary",
-                ):
-                    state["scene"] = "interests"
-                if tweak_col.button(
-                    "Tweak the brief",
-                    key=f"plan_ready_gallery_{index}_reset",
-                ):
-                    conversation["messages"] = []
-                    conversation["pending_fields"] = []
-                    conversation.pop("ready_for_gallery_prompted", None)
-                    state["notes"] = ""
-                    state.pop("timing_note", None)
-                    _ensure_conversation_intro(state)
-                    st.rerun()
+            if role == "assistant":
+                _render_scene(st, state, message, index=index)
 
     user_text = st.chat_input("Tell me what's essential for this trip…")
     if user_text:
         _run_plan_action(state, {"type": "message", "text": user_text}, container=container)
-
-    conversation = state.get("conversation") or {}
-    if PlanConversationWorkflow.ready_for_gallery(state):
-        container.success("Your brief is locked. Ready when you are to explore inspiration.")
-    else:
-        pending = conversation.get("pending_fields") if isinstance(conversation, dict) else None
-        if pending:
-            hint = ", ".join(field.replace("_", " ") for field in pending[:2])
-            container.caption(f"Still need: {hint}.")
 
     if container.button("View cinematic intro", key="plan_back_intro"):
         state["scene"] = "welcome"
@@ -595,33 +586,9 @@ def _render_cinematic_intro(container, state: Dict[str, object]) -> None:
     container.caption("Start the conversation below—destination, crew, vibes, I'm listening.")
 
 
-def _render_interest_gallery(container, state: Dict[str, object]) -> None:
-    destination = state.get("destination") or "your trip"
-    container.markdown(
-        f"""
-        ### Curate the vibe for {destination}
-        Tap ❤️ to teach Meguru what you love and 🔖 to save it straight into your moodboard.
-        """
-    )
-
-    if container.button("Back to questions", key="plan_back_conversation"):
-        state["scene"] = "conversation"
-        return
-
-    active_tags = _collect_active_tags(state)
-    if active_tags:
-        chips = " · ".join(active_tags)
-        container.markdown(
-            f"<p style='color: rgba(0, 0, 0, 0.55); margin-top: -0.2rem;'>"
-            f"{chips}"
-            "</p>",
-            unsafe_allow_html=True,
-        )
-
-    error_message = st.session_state.get(_PIPELINE_ERROR_KEY)
-    if error_message:
-        container.error(error_message)
-
+def _prepare_activity_cards(
+    state: Dict[str, object]
+) -> Tuple[List[_ExperienceCard], set[str], set[str]]:
     catalog = state.setdefault("_activity_catalog", {})
     if not isinstance(catalog, dict):  # pragma: no cover - defensive fallback
         catalog = dict(catalog)
@@ -629,10 +596,8 @@ def _render_interest_gallery(container, state: Dict[str, object]) -> None:
 
     previous_likes = set(state.get("liked_cards", []))
     previous_saves = set(state.get("saved_cards", []))
-    like_inputs: Dict[str, bool] = {}
-    save_inputs: Dict[str, bool] = {}
 
-    ranked_cards = []
+    ranked_cards: List[Tuple[float, _ExperienceCard]] = []
     for card in _EXPERIENCE_CARDS:
         score = _score_card(card, state)
         if card["id"] in previous_likes or card["id"] in previous_saves:
@@ -647,9 +612,18 @@ def _render_interest_gallery(container, state: Dict[str, object]) -> None:
     for card in selected_cards:
         catalog[str(card["id"])] = dict(card)
 
-    columns = container.columns(3, gap="large")
+    return selected_cards, previous_likes, previous_saves
+
+
+def _render_activity_cards(container, state: Dict[str, object]) -> None:
+    selected_cards, previous_likes, previous_saves = _prepare_activity_cards(state)
+
+    like_inputs: Dict[str, bool] = {}
+    save_inputs: Dict[str, bool] = {}
+
+    columns = container.columns(3, gap="large") if selected_cards else []
     for idx, card in enumerate(selected_cards):
-        target = columns[idx % len(columns)]
+        target = columns[idx % len(columns)] if columns else container
         with target:
             st.image(card["image_url"], use_container_width=True)
             st.markdown(f"**{card['title']}**")
@@ -678,6 +652,36 @@ def _render_interest_gallery(container, state: Dict[str, object]) -> None:
         _run_plan_action(state, {"type": "unsave_activity", "card": _card_payload(card_id)})
 
     _sync_activity_preferences(state)
+
+
+def _render_interest_gallery(container, state: Dict[str, object]) -> None:
+    destination = state.get("destination") or "your trip"
+    container.markdown(
+        f"""
+        ### Curate the vibe for {destination}
+        Tap ❤️ to teach Meguru what you love and 🔖 to save it straight into your moodboard.
+        """
+    )
+
+    if container.button("Back to questions", key="plan_back_conversation"):
+        state["scene"] = "conversation"
+        return
+
+    active_tags = _collect_active_tags(state)
+    if active_tags:
+        chips = " · ".join(active_tags)
+        container.markdown(
+            f"<p style='color: rgba(0, 0, 0, 0.55); margin-top: -0.2rem;'>"
+            f"{chips}"
+            "</p>",
+            unsafe_allow_html=True,
+        )
+
+    error_message = st.session_state.get(_PIPELINE_ERROR_KEY)
+    if error_message:
+        container.error(error_message)
+
+    _render_activity_cards(container, state)
 
     container.text_input(
         "Add your own must-do (press enter to keep it)",
@@ -711,6 +715,60 @@ def _render_interest_gallery(container, state: Dict[str, object]) -> None:
     container.caption(
         "Want to tweak something? Head back to the questions or keep liking cards for a different mix."
     )
+
+
+def _render_pending_requirements(
+    container, state: Mapping[str, object], *, emphasise: bool
+) -> None:
+    conversation = state.get("conversation") if isinstance(state, Mapping) else None
+    pending: List[str] = []
+    if isinstance(conversation, Mapping):
+        pending = [
+            str(field).replace("_", " ")
+            for field in conversation.get("pending_fields", []) or []
+            if field
+        ]
+
+    if not pending:
+        return
+
+    summary = ", ".join(pending)
+    message = f"Still need: {summary}."
+    if emphasise:
+        container.info(message)
+    else:
+        container.caption(message)
+
+
+def _render_scene(container, state: Dict[str, object], message: Mapping[str, Any], *, index: int) -> None:
+    scene = message.get("scene") if isinstance(message, Mapping) else None
+    if not scene:
+        return
+
+    if scene == "clarifier":
+        _render_pending_requirements(container, state, emphasise=True)
+        return
+
+    if scene == "pending":
+        _render_pending_requirements(container, state, emphasise=False)
+        return
+
+    if scene == "gallery":
+        conversation = state.get("conversation") if isinstance(state, Mapping) else None
+        anchor_index: Optional[int] = None
+        if isinstance(conversation, dict):
+            stored_index = conversation.get("gallery_message_index")
+            if isinstance(stored_index, int):
+                anchor_index = stored_index
+            else:
+                conversation["gallery_message_index"] = index
+                anchor_index = index
+
+        if anchor_index is not None and anchor_index != index:
+            return
+
+        container.success("Your brief is locked. Ready when you are to explore inspiration.")
+        _render_activity_cards(container, state)
 
 
 def _render_review(container, state: Dict[str, object]) -> None:
