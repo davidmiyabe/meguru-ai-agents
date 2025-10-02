@@ -35,15 +35,31 @@ _VIBE_OPTIONS = [
 ]
 
 
-class _ExperienceCard(TypedDict):
-    """Static representation of an experience suggestion card."""
+class _CardSignals(TypedDict, total=False):
+    """Optional metadata that helps rank cards against trip context."""
 
+    vibes: List[str]
+    pace: List[str]
+    budget: List[str]
+    duration: List[str]
+    tags: List[str]
+
+
+class _ExperienceCardRequired(TypedDict):
     id: str
     title: str
     description: str
     category: str
     image_url: str
     location_hint: str
+
+
+class _ExperienceCardOptional(TypedDict, total=False):
+    metadata: _CardSignals
+
+
+class _ExperienceCard(_ExperienceCardRequired, _ExperienceCardOptional):
+    """Static representation of an experience suggestion card."""
 
 
 _EXPERIENCE_CARDS: List[_ExperienceCard] = [
@@ -54,6 +70,13 @@ _EXPERIENCE_CARDS: List[_ExperienceCard] = [
         "category": "Nightlife",
         "image_url": "https://images.unsplash.com/photo-1504805572947-34fad45aed93?auto=format&fit=crop&w=1200&q=80",
         "location_hint": "Perfect for electric evenings and skyline views.",
+        "metadata": {
+            "vibes": ["Nightlife", "Something eclectic"],
+            "pace": ["Balanced", "All-out"],
+            "budget": ["Moderate", "Splurge"],
+            "duration": ["short_break"],
+            "tags": ["cocktails", "late-night", "skyline", "celebration"],
+        },
     },
     {
         "id": "chef_counter",
@@ -62,6 +85,13 @@ _EXPERIENCE_CARDS: List[_ExperienceCard] = [
         "category": "Foodie adventures",
         "image_url": "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1200&q=80",
         "location_hint": "Street markets, izakayas, and dessert bars in one swoop.",
+        "metadata": {
+            "vibes": ["Foodie adventures", "Nightlife"],
+            "pace": ["Balanced"],
+            "budget": ["Moderate", "Splurge"],
+            "duration": ["short_break", "week"],
+            "tags": ["chef-led", "progressive dinner", "night market", "food tour"],
+        },
     },
     {
         "id": "temple_stories",
@@ -70,6 +100,13 @@ _EXPERIENCE_CARDS: List[_ExperienceCard] = [
         "category": "Culture & history",
         "image_url": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80",
         "location_hint": "Sunrise courtyards, incense rituals, and local legends.",
+        "metadata": {
+            "vibes": ["Culture & history", "Outdoors & nature"],
+            "pace": ["Laid back", "Balanced"],
+            "budget": ["Moderate"],
+            "duration": ["short_break", "week"],
+            "tags": ["sunrise", "storyteller", "rituals", "mindful"],
+        },
     },
     {
         "id": "coastal_cycle",
@@ -78,6 +115,13 @@ _EXPERIENCE_CARDS: List[_ExperienceCard] = [
         "category": "Outdoors & nature",
         "image_url": "https://images.unsplash.com/photo-1526481280695-3c46931c2ae9?auto=format&fit=crop&w=1200&q=80",
         "location_hint": "Sea breezes, hidden beaches, and artisanal coffee stops.",
+        "metadata": {
+            "vibes": ["Outdoors & nature", "Something eclectic"],
+            "pace": ["Balanced", "All-out"],
+            "budget": ["Moderate"],
+            "duration": ["short_break", "week"],
+            "tags": ["sunrise", "cycling", "brunch", "active"],
+        },
     },
     {
         "id": "art_lab",
@@ -86,6 +130,13 @@ _EXPERIENCE_CARDS: List[_ExperienceCard] = [
         "category": "Something eclectic",
         "image_url": "https://images.unsplash.com/photo-1529429617124-aee3713d8e2f?auto=format&fit=crop&w=1200&q=80",
         "location_hint": "Boutique ateliers, galleries, and concept stores in bloom.",
+        "metadata": {
+            "vibes": ["Something eclectic", "Culture & history"],
+            "pace": ["Laid back", "Balanced"],
+            "budget": ["Moderate", "Splurge"],
+            "duration": ["week", "extended"],
+            "tags": ["design", "workshop", "boutique", "creative"],
+        },
     },
     {
         "id": "forest_baths",
@@ -94,6 +145,13 @@ _EXPERIENCE_CARDS: List[_ExperienceCard] = [
         "category": "Outdoors & nature",
         "image_url": "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1200&q=80",
         "location_hint": "Whispering pines, mountain views, and calming traditions.",
+        "metadata": {
+            "vibes": ["Outdoors & nature", "Something eclectic"],
+            "pace": ["Laid back"],
+            "budget": ["Shoestring", "Moderate"],
+            "duration": ["week", "extended"],
+            "tags": ["forest bathing", "tea ceremony", "wellness", "romantic"],
+        },
     },
 ]
 
@@ -102,6 +160,168 @@ _EXPERIENCE_CARDS: List[_ExperienceCard] = [
 _CARD_LOOKUP: Dict[str, _ExperienceCard] = {card["id"]: card for card in _EXPERIENCE_CARDS}
 
 _WORKFLOW_KEY = "_plan_conversation_workflow"
+
+_PACE_TAG_LABELS = {
+    "laid back": "slow pace",
+    "balanced": "balanced pace",
+    "all-out": "all-out pace",
+}
+
+_BUDGET_TAG_LABELS = {
+    "shoestring": "budget-friendly",
+    "moderate": "mid-range",
+    "splurge": "premium",
+}
+
+_EVENT_KEYWORDS = {
+    "anniversary": "anniversary",
+    "honeymoon": "honeymoon",
+    "birthday": "birthday trip",
+    "proposal": "proposal",
+    "babymoon": "babymoon",
+}
+
+
+def _normalise_signal(value: object) -> str:
+    return str(value).strip().lower()
+
+
+def _infer_duration_bucket(state: Mapping[str, object]) -> str | None:
+    """Approximate the requested trip duration to compare with card metadata."""
+
+    start = state.get("start_date")
+    end = state.get("end_date")
+    if isinstance(start, date) and isinstance(end, date) and end >= start:
+        days = (end - start).days + 1
+        if days <= 3:
+            return "short_break"
+        if days <= 7:
+            return "week"
+        return "extended"
+
+    timing_text = " ".join(
+        str(state.get(key, ""))
+        for key in ("timing_note", "notes")
+        if state.get(key)
+    ).lower()
+
+    if any(term in timing_text for term in ["weekend", "3-day", "short trip", "mini break"]):
+        return "short_break"
+    if any(term in timing_text for term in ["week", "7-day", "itinerary"]):
+        return "week"
+    if any(term in timing_text for term in ["sabbatical", "extended", "month", "long stay"]):
+        return "extended"
+    return None
+
+
+def _score_card(card: _ExperienceCard, state: Mapping[str, object]) -> float:
+    metadata = card.get("metadata") or {}
+    state_vibes = {
+        _normalise_signal(item)
+        for item in state.get("vibe", [])
+        if isinstance(item, str) and item.strip()
+    }
+    card_vibes = {_normalise_signal(card.get("category", ""))}
+    card_vibes.update(
+        _normalise_signal(v)
+        for v in metadata.get("vibes", []) or []
+        if isinstance(v, str)
+    )
+
+    score = 1.0
+
+    if state_vibes:
+        matched_vibes = state_vibes & card_vibes
+        if matched_vibes:
+            score += 4 + len(matched_vibes)
+        elif metadata.get("vibes"):
+            score -= 0.5
+    else:
+        score += 0.5
+
+    pace = _normalise_signal(state.get("travel_pace", ""))
+    if pace:
+        card_pace = {
+            _normalise_signal(item)
+            for item in metadata.get("pace", []) or []
+            if isinstance(item, str)
+        }
+        if pace in card_pace:
+            score += 2.5
+        elif card_pace:
+            score += 0.4
+
+    budget = _normalise_signal(state.get("budget", ""))
+    if budget:
+        card_budget = {
+            _normalise_signal(item)
+            for item in metadata.get("budget", []) or []
+            if isinstance(item, str)
+        }
+        if budget in card_budget:
+            score += 2.0
+        elif card_budget:
+            score -= 0.3
+
+    duration = _infer_duration_bucket(state)
+    if duration:
+        card_duration = {
+            _normalise_signal(item)
+            for item in metadata.get("duration", []) or []
+            if isinstance(item, str)
+        }
+        if duration in card_duration:
+            score += 1.5
+
+    custom_interests = {
+        _normalise_signal(item)
+        for item in state.get("custom_interests", [])
+        if isinstance(item, str) and item.strip()
+    }
+    if custom_interests:
+        searchable_text = " ".join(
+            [
+                card.get("title", ""),
+                card.get("description", ""),
+                card.get("location_hint", ""),
+            ]
+            + [
+                str(tag)
+                for tag in metadata.get("tags", []) or []
+                if isinstance(tag, str)
+            ]
+        ).lower()
+        for interest in custom_interests:
+            if interest and interest in searchable_text:
+                score += 1.0
+
+    return score
+
+
+def _collect_active_tags(state: Mapping[str, object]) -> List[str]:
+    tags: List[str] = []
+    for vibe in state.get("vibe", []) or []:
+        if isinstance(vibe, str) and vibe.strip():
+            tags.append(_normalise_signal(vibe))
+
+    pace = _normalise_signal(state.get("travel_pace", ""))
+    if pace:
+        label = _PACE_TAG_LABELS.get(pace, pace)
+        tags.append(label)
+
+    budget = _normalise_signal(state.get("budget", ""))
+    if budget:
+        label = _BUDGET_TAG_LABELS.get(budget, budget)
+        tags.append(label)
+
+    note_text = " ".join(
+        str(state.get(key, "")) for key in ("notes", "timing_note") if state.get(key)
+    ).lower()
+    for keyword, label in _EVENT_KEYWORDS.items():
+        if keyword in note_text and label not in tags:
+            tags.append(label)
+
+    return tags
 
 
 def _workflow() -> PlanConversationWorkflow:
@@ -428,22 +648,47 @@ def _render_interest_gallery(container, state: Dict[str, object]) -> None:
         state["scene"] = "conversation"
         return
 
-    vibe_tags = sorted(set(state.get("vibe", [])))
-    if vibe_tags:
-        chips = " ".join(f"`{tag}`" for tag in vibe_tags)
-        container.caption(f"Dialling in on: {chips}")
+    active_tags = _collect_active_tags(state)
+    if active_tags:
+        chips = " · ".join(active_tags)
+        container.markdown(
+            f"<p style='color: rgba(0, 0, 0, 0.55); margin-top: -0.2rem;'>"
+            f"{chips}"
+            "</p>",
+            unsafe_allow_html=True,
+        )
 
     error_message = st.session_state.get(_PIPELINE_ERROR_KEY)
     if error_message:
         container.error(error_message)
+
+    catalog = state.setdefault("_activity_catalog", {})
+    if not isinstance(catalog, dict):  # pragma: no cover - defensive fallback
+        catalog = dict(catalog)
+        state["_activity_catalog"] = catalog
 
     previous_likes = set(state.get("liked_cards", []))
     previous_saves = set(state.get("saved_cards", []))
     like_inputs: Dict[str, bool] = {}
     save_inputs: Dict[str, bool] = {}
 
+    ranked_cards = []
+    for card in _EXPERIENCE_CARDS:
+        score = _score_card(card, state)
+        if card["id"] in previous_likes or card["id"] in previous_saves:
+            score += 5
+        ranked_cards.append((score, card))
+
+    ranked_cards.sort(key=lambda item: item[0], reverse=True)
+
+    min_cards = max(6, len(previous_likes | previous_saves))
+    selected_cards = [card for _, card in ranked_cards[:min_cards] or ranked_cards]
+
+    for card in selected_cards:
+        catalog[str(card["id"])] = dict(card)
+
     columns = container.columns(3, gap="large")
-    for idx, card in enumerate(_EXPERIENCE_CARDS):
+    for idx, card in enumerate(selected_cards):
         target = columns[idx % len(columns)]
         with target:
             st.image(card["image_url"], use_container_width=True)
