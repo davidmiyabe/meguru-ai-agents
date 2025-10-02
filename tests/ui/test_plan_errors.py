@@ -21,6 +21,12 @@ from meguru.ui import plan
             "Unable to generate the itinerary. Provide an OpenAI API key via the OPENAI_API_KEY environment variable.",
         ),
         (
+            RuntimeError(
+                "Client error '429 Too Many Requests' for url 'https://api.openai.com/v1/chat/completions'"
+            ),
+            "Unable to generate the itinerary. The OpenAI API rate limit was hit. Wait a moment and try again.",
+        ),
+        (
             ValueError("LLM quota exceeded"),
             "Unable to generate the itinerary. LLM quota exceeded",
         ),
