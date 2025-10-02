@@ -134,7 +134,11 @@ class PlanConversationWorkflow:
         else:
             curator_draft.call_to_action = None
 
-        styled = self.stylist.run(curator_draft, state.get("vibe", []))
+        stylist_context = {
+            "vibe": state.get("vibe", []),
+            "mood": state.get("mood"),
+        }
+        styled = self.stylist.run(curator_draft, stylist_context)
         update.assistant_chunks.extend(styled.chunks)
 
         if listener_result.trigger_planning and self._has_prioritised_activity(state):
@@ -180,6 +184,9 @@ class PlanConversationWorkflow:
                 if vibe:
                     current.add(str(vibe))
             state["vibe"] = sorted(current)
+
+        if updates.get("mood"):
+            state["mood"] = str(updates["mood"]).strip()
 
         catalog = state.setdefault("_activity_catalog", {})
 

@@ -1000,6 +1000,7 @@ def _build_trip_intent(state: Dict[str, object]) -> TripIntent:
         duration_days=duration_days,
         travel_pace=str(state.get("travel_pace")) if state.get("travel_pace") else None,
         budget=str(state.get("budget")) if state.get("budget") else None,
+        mood=str(state.get("mood")) if state.get("mood") else None,
         interests=sorted(interests_set),
         must_do=must_do,
         notes=combined_notes,

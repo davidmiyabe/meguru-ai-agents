@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import json
+
 from meguru.agents.clarifier import Clarifier
+from meguru.agents.curator import CuratorDraft
 from meguru.agents.listener import Listener
+from meguru.agents.stylist import Stylist
 from meguru.workflows.plan_chat import PlanConversationWorkflow
 
 
@@ -56,3 +60,36 @@ def test_ready_for_gallery_requires_group_signal() -> None:
 
     state["group_size"] = 3
     assert PlanConversationWorkflow.ready_for_gallery(state)
+
+
+def test_listener_extracts_mood_signal() -> None:
+    listener = Listener()
+    result = listener.run(
+        action_json=json.dumps({"type": "message", "text": "I'm burned out and need a reset"}),
+        context={},
+        pending_fields=[],
+    )
+
+    assert result.context_updates.get("mood") == "burned_out"
+
+
+def test_apply_updates_persists_mood() -> None:
+    state: dict[str, object] = {
+        "liked_cards": [],
+        "saved_cards": [],
+    }
+    PlanConversationWorkflow._apply_updates(state, {"mood": "celebration"})
+
+    assert state["mood"] == "celebration"
+
+
+def test_stylist_swaps_tone_with_mood() -> None:
+    draft = CuratorDraft(lines=["Adding **Sunset Cruise** to the storyboard."])
+    stylist = Stylist()
+
+    calm = stylist.run(draft, {"mood": "burned_out"})
+    hype = stylist.run(draft, {"mood": "celebration"})
+
+    assert "deep breath" in calm.chunks[0].lower()
+    assert "confetti" in hype.chunks[0].lower()
+    assert calm.chunks[0] != hype.chunks[0]
