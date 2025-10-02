@@ -39,6 +39,7 @@ class Clarifier:
         "vibe": "Paint the vibe—nightlife, nature, culture? Give me a few keywords.",
         "travel_pace": "Should days feel laid back, balanced, or all-out?",
         "budget": "What budget lane are we in—shoestring, moderate, or splurge?",
+        "group": "Who’s coming along and how big is the crew?",
     }
 
     def run(self, missing_fields: Iterable[str], context: Mapping[str, Any]) -> ClarifierPrompt:
