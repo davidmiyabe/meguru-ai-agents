@@ -113,7 +113,7 @@ def _render_auth_controls(client: SupabaseClient) -> None:
                         "expires_at": session.expires_at,
                     }
                     st.session_state[PROFILE_STATUS_KEY] = "Signed in successfully."
-                    st.experimental_rerun()
+                    st.rerun()
 
 
 def _render_user_summary(session: SupabaseSession) -> None:
@@ -126,7 +126,7 @@ def _render_user_summary(session: SupabaseSession) -> None:
         st.session_state.pop(SUPABASE_SESSION_KEY, None)
         st.session_state.pop(SUPABASE_TOKENS_KEY, None)
         st.session_state[PROFILE_STATUS_KEY] = "Signed out."
-        st.experimental_rerun()
+        st.rerun()
 
 
 def _load_trips(store: InMemoryProfileStore | SupabaseProfileStore) -> List[StoredTrip]:
@@ -181,7 +181,7 @@ def _render_trip_summary(trip: StoredTrip, store: InMemoryProfileStore | Supabas
             else:
                 if duplicate:
                     st.session_state[PROFILE_STATUS_KEY] = f"Duplicated {trip.name}."
-                    st.experimental_rerun()
+                    st.rerun()
 
         st.markdown("### Day by day")
         for day in trip.itinerary.days:

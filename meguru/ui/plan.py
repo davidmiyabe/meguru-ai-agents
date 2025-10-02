@@ -481,7 +481,7 @@ def _render_conversation(container, state: Dict[str, object]) -> None:
                     state["notes"] = ""
                     state.pop("timing_note", None)
                     _ensure_conversation_intro(state)
-                    st.experimental_rerun()
+                    st.rerun()
 
     user_text = st.chat_input("Tell me what's essential for this trip…")
     if user_text:
@@ -612,7 +612,7 @@ def _render_cinematic_intro(container, state: Dict[str, object]) -> None:
                 state,
                 {"type": "message", "text": cleaned_destination},
             )
-            st.experimental_rerun()
+            st.rerun()
 
     container.caption("You can always come back to change the destination later.")
 
