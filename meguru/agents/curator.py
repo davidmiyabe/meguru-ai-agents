@@ -34,7 +34,9 @@ class Curator:
 
         if listener_result.action_type == "message":
             if listener_result.context_updates.get("destination"):
-                lines.append(f"Kyoto, Lisbon, {destination}—love that pick. We'll anchor the story in {destination}.")
+                lines.append(
+                    f"{destination} is where the reel lights up—I'll build the next act around that skyline."
+                )
             elif listener_result.context_updates.get("vibe_add"):
                 vibes = listener_result.context_updates["vibe_add"]
                 chips = " ".join(f"`{vibe}`" for vibe in sorted(set(vibes)))
