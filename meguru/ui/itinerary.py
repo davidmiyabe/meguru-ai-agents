@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, time, timedelta
-from typing import Dict, List, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 import streamlit as st
 
@@ -110,6 +110,37 @@ _SLOT_TIME_WINDOWS: Tuple[Tuple[str, time, time], ...] = (
 )
 
 _REFINER_AGENT: RefinerAgent | None = None
+
+
+def _dedupe_inspirations(cards: Iterable[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    seen: set[str] = set()
+    deduped: List[Dict[str, Any]] = []
+    for card in cards:
+        if not isinstance(card, Mapping):
+            continue
+        card_id = str(card.get("id") or card.get("title") or "").strip()
+        if not card_id or card_id in seen:
+            continue
+        payload = dict(card)
+        payload.setdefault("id", card_id)
+        deduped.append(payload)
+        seen.add(card_id)
+    return deduped
+
+
+def _format_inspiration_lines(cards: Iterable[Mapping[str, Any]]) -> str:
+    lines: List[str] = []
+    for card in _dedupe_inspirations(cards):
+        title = str(card.get("title") or card.get("id") or "Experience")
+        category = str(card.get("category") or "").strip()
+        location_hint = str(card.get("location_hint") or "").strip()
+        descriptor = f"**{title}**"
+        if category:
+            descriptor += f" · {category}"
+        if location_hint:
+            descriptor += f" — {location_hint}"
+        lines.append(f"- {descriptor}")
+    return "\n".join(lines)
 
 
 def _ensure_session_state() -> None:
@@ -515,6 +546,19 @@ def render_itinerary_tab(container) -> None:
         st.markdown(f"### {itinerary.destination}")
         if intent and intent.interests:
             st.caption("Interests: " + ", ".join(intent.interests))
+
+        if intent and (intent.saved_inspirations or intent.liked_inspirations):
+            st.markdown("#### Saved inspirations")
+            saved_lines = _format_inspiration_lines(intent.saved_inspirations)
+            if saved_lines:
+                st.markdown(saved_lines)
+            else:
+                st.caption("Your saved picks will appear here once you add them from the Plan tab.")
+
+            liked_lines = _format_inspiration_lines(intent.liked_inspirations)
+            if liked_lines:
+                st.markdown("**Liked inspirations**")
+                st.markdown(liked_lines)
 
         if itinerary.start_date and itinerary.end_date:
             start = itinerary.start_date.strftime("%b %d, %Y")

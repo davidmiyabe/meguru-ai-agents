@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 from meguru.agents import DEFAULT_AGENT_MODEL, call_llm_and_validate, format_prompt_data
 from meguru.schemas import (
@@ -64,6 +64,22 @@ class PlannerAgent:
             "research": corpus,
         }
 
+        if trip_intent.saved_inspirations or trip_intent.liked_inspirations:
+            prompt_payload["traveler_selected_activities"] = {
+                "saved": trip_intent.saved_inspirations,
+                "liked": trip_intent.liked_inspirations,
+            }
+
+        selection_guidance: List[str] = []
+        if trip_intent.saved_inspirations:
+            selection_guidance.append(
+                "Treat saved inspirations as anchor experiences that must appear in the itinerary."
+            )
+        if trip_intent.liked_inspirations:
+            selection_guidance.append(
+                "Use liked inspirations to influence supporting slots—include them when possible or weave their themes into nearby moments."
+            )
+
         prompt = (
             "Design a day-by-day itinerary that balances activity pace, observes opening hours, "
             "and minimises unnecessary backtracking.\n"
@@ -83,6 +99,9 @@ class PlannerAgent:
             "\n"
             "Output must validate against the Itinerary schema."
         )
+
+        if selection_guidance:
+            prompt += "\n# Traveller curated inspirations\n" + "\n".join(selection_guidance) + "\n"
 
         itinerary = call_llm_and_validate(
             schema=Itinerary,

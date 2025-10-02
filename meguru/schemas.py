@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 import re
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from pydantic import (
     AliasChoices,
@@ -65,6 +65,8 @@ class TripIntent(BaseModel):
     dining_preferences: List[str] = Field(default_factory=list)
     lodging_preferences: List[str] = Field(default_factory=list)
     notes: Optional[str] = None
+    liked_inspirations: List[Dict[str, Any]] = Field(default_factory=list)
+    saved_inspirations: List[Dict[str, Any]] = Field(default_factory=list)
 
     model_config = ConfigDict(populate_by_name=True)
 
