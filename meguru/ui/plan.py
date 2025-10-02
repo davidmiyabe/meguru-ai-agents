@@ -444,6 +444,13 @@ def _render_conversation(container, state: Dict[str, object]) -> None:
     conversation = workflow.ensure_conversation(state)
     _ensure_conversation_intro(state)
 
+    messages = _conversation_log(state)
+
+    has_user_message = any(message.get("role") == "user" for message in messages)
+    if not has_user_message:
+        intro_container = container.container()
+        _render_cinematic_intro(intro_container, state)
+
     if PlanConversationWorkflow.ready_for_gallery(state) and not conversation.get(
         "ready_for_gallery_prompted",
     ):
@@ -456,7 +463,6 @@ def _render_conversation(container, state: Dict[str, object]) -> None:
         )
         conversation["ready_for_gallery_prompted"] = True
 
-    messages = _conversation_log(state)
     for index, message in enumerate(messages):
         role = message.get("role", "assistant")
         content = message.get("content", "")
@@ -496,7 +502,7 @@ def _render_conversation(container, state: Dict[str, object]) -> None:
             hint = ", ".join(field.replace("_", " ") for field in pending[:2])
             container.caption(f"Still need: {hint}.")
 
-    if container.button("Back to cinematic intro", key="plan_back_intro"):
+    if container.button("View cinematic intro", key="plan_back_intro"):
         state["scene"] = "welcome"
 
 
@@ -518,7 +524,7 @@ def ensure_plan_state() -> None:
 
     if _WIZARD_KEY not in st.session_state:
         st.session_state[_WIZARD_KEY] = {
-            "scene": "welcome",
+            "scene": "conversation",
             "destination": "",
             "date_mode": "dates",
             "start_date": None,
@@ -571,50 +577,22 @@ def _month_options() -> Tuple[List[str], Dict[str, str]]:
 
 
 def _render_cinematic_intro(container, state: Dict[str, object]) -> None:
+    _ensure_conversation_intro(state)
+
     container.markdown(
         """
         <div style="background: linear-gradient(120deg, #040b1a, #1c2b4d); padding: 3rem 2.4rem; border-radius: 24px;">
           <p style="color: rgba(255,255,255,0.75); letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 0.2rem;">Scene One</p>
           <h2 style="color: white; font-size: 2.8rem; margin: 0;">Where do you want to go?</h2>
           <p style="color: rgba(255,255,255,0.85); max-width: 640px; font-size: 1.05rem;">
-            Picture sweeping drone shots and cinematic music. Drop the destination and we'll craft the opening act of your journey.
+            Picture sweeping drone shots and cinematic music. Drop your opening brief in the chat and we'll craft the first act of your journey.
           </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    previous_destination = str(state.get("destination", ""))
-    destination = container.text_input(
-        "Destination",
-        value=previous_destination,
-        key="plan_destination_input",
-        placeholder="Where to?",
-        label_visibility="collapsed",
-    )
-    cleaned_destination = destination.strip()
-    state["destination"] = cleaned_destination
-
-    if cleaned_destination:
-        has_changed = cleaned_destination != previous_destination.strip()
-        if has_changed:
-            conversation = state.get("conversation")
-            if not isinstance(conversation, dict):
-                conversation = {"messages": [], "pending_fields": []}
-            else:
-                conversation["messages"] = []
-                conversation["pending_fields"] = []
-            state["conversation"] = conversation
-            _conversation_log(state)
-            st.session_state[_PIPELINE_ERROR_KEY] = None
-            state["scene"] = "conversation"
-            _run_plan_action(
-                state,
-                {"type": "message", "text": cleaned_destination},
-            )
-            st.rerun()
-
-    container.caption("You can always come back to change the destination later.")
+    container.caption("Start the conversation below—destination, crew, vibes, I'm listening.")
 
 
 def _render_conversation_transcript(container, state: Dict[str, object]) -> None:
@@ -1013,13 +991,20 @@ def render_plan_tab(container) -> None:
         transcript_area = st.container()
         body_area = st.container()
 
-        scene = state.get("scene", "welcome")
+        scene = str(state.get("scene") or "conversation")
+
+        if scene not in {"conversation", "interests", "review", "welcome"}:
+            scene = "conversation"
+            state["scene"] = scene
 
         if scene in {"interests", "review"}:
             _render_conversation_transcript(transcript_area, state)
 
         if scene == "welcome":
             _render_cinematic_intro(body_area, state)
+            if body_area.button("Return to conversation", key="plan_intro_to_conversation", type="primary"):
+                state["scene"] = "conversation"
+                st.rerun()
         elif scene == "conversation":
             _render_conversation(body_area, state)
         elif scene == "interests":
