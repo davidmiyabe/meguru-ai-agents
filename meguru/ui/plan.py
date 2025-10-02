@@ -221,14 +221,47 @@ def _run_plan_action(
 
 def _render_conversation(container, state: Dict[str, object]) -> None:
     workflow = _workflow()
-    workflow.ensure_conversation(state)
+    conversation = workflow.ensure_conversation(state)
     _ensure_conversation_intro(state)
 
-    for message in _conversation_log(state):
+    if PlanConversationWorkflow.ready_for_gallery(state) and not conversation.get(
+        "ready_for_gallery_prompted",
+    ):
+        _conversation_log(state).append(
+            {
+                "role": "assistant",
+                "content": "I think I’ve got a vibe… want to see what I’m imagining?",
+                "variant": "ready_for_gallery_prompt",
+            }
+        )
+        conversation["ready_for_gallery_prompted"] = True
+
+    messages = _conversation_log(state)
+    for index, message in enumerate(messages):
         role = message.get("role", "assistant")
         content = message.get("content", "")
+        variant = message.get("variant")
         with container.chat_message(role):
             st.markdown(content)
+            if variant == "ready_for_gallery_prompt":
+                show_col, tweak_col = st.columns(2)
+                if show_col.button(
+                    "Show me the inspiration",
+                    key=f"plan_ready_gallery_{index}_show",
+                    type="primary",
+                ):
+                    state["scene"] = "interests"
+                if tweak_col.button(
+                    "Tweak the brief",
+                    key=f"plan_ready_gallery_{index}_reset",
+                ):
+                    conversation["messages"] = []
+                    conversation["pending_fields"] = []
+                    conversation.pop("ready_for_gallery_prompted", None)
+                    state["notes"] = ""
+                    state.pop("timing_note", None)
+                    _ensure_conversation_intro(state)
+                    st.experimental_rerun()
 
     user_text = st.chat_input("Tell me what's essential for this trip…")
     if user_text:
@@ -237,20 +270,6 @@ def _render_conversation(container, state: Dict[str, object]) -> None:
     conversation = state.get("conversation") or {}
     if PlanConversationWorkflow.ready_for_gallery(state):
         container.success("Your brief is locked. Ready when you are to explore inspiration.")
-        controls = container.columns([1, 1])
-        if controls[0].button("Update answers", key="plan_conversation_restart"):
-            conversation["messages"] = []
-            conversation["pending_fields"] = []
-            state["notes"] = ""
-            state.pop("timing_note", None)
-            _ensure_conversation_intro(state)
-            st.experimental_rerun()
-        if controls[1].button(
-            "Next: Explore inspiration",
-            key="plan_conversation_finish",
-            type="primary",
-        ):
-            state["scene"] = "interests"
     else:
         pending = conversation.get("pending_fields") if isinstance(conversation, dict) else None
         if pending:
