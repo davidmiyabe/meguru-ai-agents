@@ -345,26 +345,35 @@ def _render_cinematic_intro(container, state: Dict[str, object]) -> None:
         unsafe_allow_html=True,
     )
 
+    previous_destination = str(state.get("destination", ""))
     destination = container.text_input(
         "Destination",
-        value=str(state.get("destination", "")),
+        value=previous_destination,
         key="plan_destination_input",
-        placeholder="Kyoto, Lisbon, Reykjavik…",
+        placeholder="Where to?",
+        label_visibility="collapsed",
     )
-    state["destination"] = destination.strip()
+    cleaned_destination = destination.strip()
+    state["destination"] = cleaned_destination
 
-    cta = container.button(
-        "Start the adventure",
-        type="primary",
-        use_container_width=True,
-        key="plan_start_cta",
-    )
-    if cta:
-        if state["destination"]:
-            state["scene"] = "conversation"
+    if cleaned_destination:
+        has_changed = cleaned_destination != previous_destination.strip()
+        if has_changed:
+            conversation = state.get("conversation")
+            if not isinstance(conversation, dict):
+                conversation = {"messages": [], "pending_fields": []}
+            else:
+                conversation["messages"] = []
+                conversation["pending_fields"] = []
+            state["conversation"] = conversation
+            _conversation_log(state)
             st.session_state[_PIPELINE_ERROR_KEY] = None
-        else:
-            container.warning("Tell us where you're headed to roll the trailer.")
+            state["scene"] = "conversation"
+            _run_plan_action(
+                state,
+                {"type": "message", "text": cleaned_destination},
+            )
+            st.experimental_rerun()
 
     container.caption("You can always come back to change the destination later.")
 
