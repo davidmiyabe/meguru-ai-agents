@@ -20,6 +20,45 @@ _PACE_OPTIONS = ["Laid back", "Balanced", "All-out"]
 _BUDGET_OPTIONS = ["Shoestring", "Moderate", "Splurge"]
 
 
+_MOOD_KEYWORDS = {
+    "burned_out": (
+        "burned out",
+        "burnt out",
+        "burned-out",
+        "burnt-out",
+        "overwhelmed",
+        "exhausted",
+        "fried",
+        "stressed",
+        "drained",
+    ),
+    "celebration": (
+        "celebrate",
+        "celebration",
+        "birthday",
+        "anniversary",
+        "promotion",
+        "engagement",
+        "honeymoon",
+        "bachelorette",
+        "bachelor party",
+        "graduation",
+    ),
+    "peaceful": (
+        "peaceful",
+        "peace",
+        "calm",
+        "serene",
+        "restful",
+        "unwind",
+        "relax",
+        "recharge",
+        "reset",
+        "quiet",
+    ),
+}
+
+
 def _normalise(text: str) -> str:
     return re.sub(r"\s+", " ", text.strip().lower())
 
@@ -150,6 +189,18 @@ def _extract_vibes(text: str) -> List[str]:
             if chunk == option.lower() and option not in detected:
                 detected.append(option)
     return detected
+
+
+def _extract_mood(text: str) -> Optional[str]:
+    lowered = _normalise(text)
+    if not lowered:
+        return None
+
+    for mood, keywords in _MOOD_KEYWORDS.items():
+        for keyword in keywords:
+            if keyword in lowered:
+                return mood
+    return None
 
 
 def _infer_travel_pace(text: str) -> Optional[str]:
@@ -339,6 +390,10 @@ class Listener:
             if group_size:
                 context_updates["group_size"] = group_size
 
+            mood = _extract_mood(text)
+            if mood:
+                context_updates["mood"] = mood
+
         elif action_type in {"like_activity", "save_activity", "unlike_activity", "unsave_activity"}:
             card = payload.get("card") if isinstance(payload.get("card"), dict) else {}
             card_title = str(card.get("title") or card.get("id") or "this experience")
@@ -406,6 +461,8 @@ class Listener:
             merged["group_type"] = updates["group_type"]
         if "group_size" in updates and updates["group_size"]:
             merged["group_size"] = updates["group_size"]
+        if "mood" in updates and updates["mood"]:
+            merged["mood"] = updates["mood"]
 
         vibes: Iterable[str] = updates.get("vibe_add") or []
         if vibes:

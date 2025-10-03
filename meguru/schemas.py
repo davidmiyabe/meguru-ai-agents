@@ -59,6 +59,7 @@ class TripIntent(BaseModel):
         validation_alias=AliasChoices("travel_pace", "pace"),
     )
     budget: Optional[str] = None
+    mood: Optional[str] = None
     interests: List[str] = Field(default_factory=list)
     must_do: List[str] = Field(default_factory=list)
     exclusions: List[str] = Field(default_factory=list)

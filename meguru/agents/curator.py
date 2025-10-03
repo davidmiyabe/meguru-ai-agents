@@ -30,7 +30,15 @@ class Curator:
         """Return a curator draft responding to the traveller action."""
 
         destination = str(context.get("destination") or "your trip")
+        mood = str(context.get("mood") or "").strip().lower()
         lines: List[str] = []
+
+        if mood == "burned_out":
+            lines.append("I hear the need for a reset—I'll keep curating with soft landings and breathing room.")
+        elif mood == "celebration":
+            lines.append("Confetti mode activated! I'll turn the energy up so every beat feels celebratory.")
+        elif mood == "peaceful":
+            lines.append("Keeping things tranquil—I'll thread in calm, grounding experiences throughout.")
 
         if listener_result.action_type == "message":
             if listener_result.context_updates.get("destination"):
@@ -64,7 +72,16 @@ class Curator:
             if card_id and isinstance(card, dict):
                 details = card.get(card_id, {})
                 title = details.get("title") or card_id
-                lines.append(f"Adding **{title}** to the storyboard.")
+                if mood == "burned_out":
+                    lines.append(
+                        f"Adding **{title}** to the decompress playlist—made for unwinding."
+                    )
+                elif mood == "celebration":
+                    lines.append(f"Giving **{title}** top billing for this celebration arc.")
+                elif mood == "peaceful":
+                    lines.append(f"Sliding **{title}** into the calm-flow storyboard.")
+                else:
+                    lines.append(f"Adding **{title}** to the storyboard.")
                 if details.get("location_hint"):
                     lines.append(details["location_hint"])
             else:
