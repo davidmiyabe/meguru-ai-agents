@@ -13,7 +13,11 @@ from meguru.agents import (
     Listener,
     Planner,
     Stylist,
+    TripBriefMemory,
 )
+
+
+_PLANNING_SELECTION_THRESHOLD = 3
 
 
 def _coerce_positive_int(value: object) -> int | None:
@@ -59,6 +63,7 @@ class PlanConversationWorkflow:
         self.stylist = Stylist()
         self.planner = Planner()
         self.editor = Editor()
+        self.memory = TripBriefMemory()
 
     @staticmethod
     def ensure_conversation(state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
@@ -79,6 +84,8 @@ class PlanConversationWorkflow:
         conversation = self.ensure_conversation(state)
         pending_fields: Sequence[str] = list(conversation.get("pending_fields", []))
 
+        state.setdefault("trip_brief", {})
+
         ready_before = self.ready_for_gallery(state)
         prioritised_before = self._has_prioritised_activity(state)
 
@@ -89,6 +96,9 @@ class PlanConversationWorkflow:
         )
 
         self._apply_updates(state, listener_result.context_updates)
+
+        brief = self.memory.update(state)
+        state["trip_brief"] = brief.to_dict()
 
         ready_after = self.ready_for_gallery(state)
         prioritised_after = self._has_prioritised_activity(state)
@@ -126,7 +136,7 @@ class PlanConversationWorkflow:
             and not prioritised_before
         ):
             call_to_actions.append(
-                "Ready for me to spin these picks into an itinerary preview? Just give me the cue."
+                "Got it. Want me to stitch this into a cinematic itinerary for you?"
             )
 
         if call_to_actions:
@@ -137,6 +147,7 @@ class PlanConversationWorkflow:
         stylist_context = {
             "vibe": state.get("vibe", []),
             "mood": state.get("mood"),
+            "trip_brief": state.get("trip_brief"),
         }
         styled = self.stylist.run(curator_draft, stylist_context)
         update.assistant_chunks.extend(styled.chunks)
@@ -213,10 +224,27 @@ class PlanConversationWorkflow:
         PlanConversationWorkflow._refresh_activity_collections(state)
 
     @staticmethod
+    def _selected_card_ids(state: Mapping[str, Any]) -> set[str]:
+        selected: set[str] = set()
+
+        for key in ("liked_cards", "saved_cards"):
+            for card_id in state.get(key, []) or []:
+                if isinstance(card_id, str) and card_id:
+                    selected.add(card_id)
+
+        for collection_key in ("liked_inspirations", "saved_inspirations"):
+            for entry in state.get(collection_key, []) or []:
+                if isinstance(entry, Mapping):
+                    card_id = entry.get("id")
+                    if isinstance(card_id, str) and card_id:
+                        selected.add(card_id)
+
+        return selected
+
+    @staticmethod
     def _has_prioritised_activity(state: Mapping[str, Any]) -> bool:
-        if state.get("saved_inspirations") or state.get("liked_inspirations"):
-            return True
-        return bool(state.get("liked_cards") or state.get("saved_cards"))
+        selected = PlanConversationWorkflow._selected_card_ids(state)
+        return len(selected) >= _PLANNING_SELECTION_THRESHOLD
 
     @staticmethod
     def _refresh_activity_collections(state: MutableMapping[str, Any]) -> None:

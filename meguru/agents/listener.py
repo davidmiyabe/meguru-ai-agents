@@ -205,7 +205,10 @@ def _extract_mood(text: str) -> Optional[str]:
 
 def _infer_travel_pace(text: str) -> Optional[str]:
     lowered = _normalise(text)
-    if any(token in lowered for token in ("relax", "slow", "chill", "easy", "unhurried")):
+    laid_back_markers = ("laid back", "laid-back", "laidback")
+    if any(token in lowered for token in laid_back_markers) or any(
+        token in lowered for token in ("relax", "slow", "chill", "easy", "unhurried")
+    ):
         return "Laid back"
     if any(token in lowered for token in ("balanced", "mix", "medium", "moderate")):
         return "Balanced"
