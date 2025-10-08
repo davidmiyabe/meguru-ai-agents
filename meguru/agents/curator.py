@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping
+from typing import Any, Dict, List, Mapping, Optional
 
 from .listener import ListenerResult
+from .memory import TripBrief
 
 
 @dataclass
@@ -29,7 +30,10 @@ class Curator:
     def run(self, listener_result: ListenerResult, context: Mapping[str, Any]) -> CuratorDraft:
         """Return a curator draft responding to the traveller action."""
 
-        destination = str(context.get("destination") or "your trip")
+        brief = self._extract_brief(context)
+        destination = brief.destination if brief and brief.destination else str(
+            context.get("destination") or "your trip"
+        )
         mood = str(context.get("mood") or "").strip().lower()
         lines: List[str] = []
 
@@ -92,6 +96,11 @@ class Curator:
         else:
             lines.append("Got it. Keeping the momentum going.")
 
+        if brief:
+            narrative = self._compose_brief_narrative(brief)
+            if narrative:
+                lines.append(narrative)
+
         if not lines:
             lines.append("Noted. I'll keep this shaping the journey.")
 
@@ -100,6 +109,45 @@ class Curator:
             call_to_action = "Drop those details when you're ready and I'll keep refining."
 
         return CuratorDraft(lines=lines, call_to_action=call_to_action)
+
+    @staticmethod
+    def _extract_brief(context: Mapping[str, Any]) -> Optional[TripBrief]:
+        data = context.get("trip_brief")
+        if isinstance(data, TripBrief):
+            return data
+        if isinstance(data, Mapping):
+            try:
+                return TripBrief.from_mapping(data)
+            except Exception:  # pragma: no cover - defensive
+                return None
+        return None
+
+    @staticmethod
+    def _compose_brief_narrative(brief: TripBrief) -> Optional[str]:
+        fragments: List[str] = []
+
+        if brief.vibes:
+            vibe_label = " + ".join(v.lower() for v in brief.vibes[:2])
+            fragments.append(f"{vibe_label} energy")
+        if brief.travel_pace:
+            fragments.append(f"{brief.travel_pace.lower()} pacing")
+        if brief.budget:
+            fragments.append(f"{brief.budget.lower()} budget lane")
+        if brief.group_type:
+            fragments.append(f"for the {brief.group_type.lower()}")
+        if brief.occasion:
+            fragments.append(f"with a nod to the {brief.occasion}")
+
+        if not fragments:
+            return None
+
+        if len(fragments) == 1:
+            summary = fragments[0]
+        else:
+            summary = ", ".join(fragments[:-1]) + f" and {fragments[-1]}"
+
+        subject = brief.destination or "this trip"
+        return f"Keeping {subject} tuned to {summary}."
 
 
 __all__ = ["Curator", "CuratorDraft"]

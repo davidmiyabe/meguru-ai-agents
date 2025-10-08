@@ -68,6 +68,7 @@ from .curator import Curator, CuratorDraft
 from .editor import Editor, EditorRevision
 from .intake import IntakeAgent
 from .listener import Listener, ListenerResult
+from .memory import TripBrief, TripBriefMemory
 from .planner import PlannerAgent
 from .planning import Planner, PlannerBrief
 from .refiner import RefinerAgent
@@ -88,6 +89,8 @@ __all__ = [
     "IntakeAgent",
     "Listener",
     "ListenerResult",
+    "TripBrief",
+    "TripBriefMemory",
     "Planner",
     "PlannerAgent",
     "PlannerBrief",

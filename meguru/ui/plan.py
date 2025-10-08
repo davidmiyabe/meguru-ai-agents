@@ -26,6 +26,9 @@ _GROUP_TYPES = [
 ]
 _PACE_OPTIONS = ["Laid back", "Balanced", "All-out"]
 _BUDGET_OPTIONS = ["Shoestring", "Moderate", "Splurge"]
+_MAX_GALLERY_CARDS = 4
+_MIN_GALLERY_CARDS = 3
+_ITINERARY_MIN_SELECTIONS = 3
 _VIBE_OPTIONS = [
     "Nightlife",
     "Foodie adventures",
@@ -43,6 +46,9 @@ class _CardSignals(TypedDict, total=False):
     budget: List[str]
     duration: List[str]
     tags: List[str]
+    group_types: List[str]
+    tones: List[str]
+    moods: List[str]
 
 
 class _ExperienceCardRequired(TypedDict):
@@ -76,6 +82,9 @@ _EXPERIENCE_CARDS: List[_ExperienceCard] = [
             "budget": ["Moderate", "Splurge"],
             "duration": ["short_break"],
             "tags": ["cocktails", "late-night", "skyline", "celebration"],
+            "group_types": ["Friends trip", "Partner getaway", "Workmates"],
+            "tones": ["high-energy"],
+            "moods": ["celebration"],
         },
     },
     {
@@ -91,6 +100,9 @@ _EXPERIENCE_CARDS: List[_ExperienceCard] = [
             "budget": ["Moderate", "Splurge"],
             "duration": ["short_break", "week"],
             "tags": ["chef-led", "progressive dinner", "night market", "food tour"],
+            "group_types": ["Partner getaway", "Friends trip"],
+            "tones": ["indulgent", "romantic"],
+            "moods": ["celebration"],
         },
     },
     {
@@ -106,6 +118,9 @@ _EXPERIENCE_CARDS: List[_ExperienceCard] = [
             "budget": ["Moderate"],
             "duration": ["short_break", "week"],
             "tags": ["sunrise", "storyteller", "rituals", "mindful"],
+            "group_types": ["Just me", "Partner getaway", "Family crew"],
+            "tones": ["reflective"],
+            "moods": ["peaceful", "burned_out"],
         },
     },
     {
@@ -121,6 +136,9 @@ _EXPERIENCE_CARDS: List[_ExperienceCard] = [
             "budget": ["Moderate"],
             "duration": ["short_break", "week"],
             "tags": ["sunrise", "cycling", "brunch", "active"],
+            "group_types": ["Friends trip", "Partner getaway"],
+            "tones": ["adventurous"],
+            "moods": ["celebration"],
         },
     },
     {
@@ -136,6 +154,9 @@ _EXPERIENCE_CARDS: List[_ExperienceCard] = [
             "budget": ["Moderate", "Splurge"],
             "duration": ["week", "extended"],
             "tags": ["design", "workshop", "boutique", "creative"],
+            "group_types": ["Just me", "Friends trip"],
+            "tones": ["creative"],
+            "moods": ["peaceful"],
         },
     },
     {
@@ -151,6 +172,9 @@ _EXPERIENCE_CARDS: List[_ExperienceCard] = [
             "budget": ["Shoestring", "Moderate"],
             "duration": ["week", "extended"],
             "tags": ["forest bathing", "tea ceremony", "wellness", "romantic"],
+            "group_types": ["Partner getaway", "Just me"],
+            "tones": ["soothing", "romantic"],
+            "moods": ["peaceful", "burned_out"],
         },
     },
 ]
@@ -179,6 +203,22 @@ _EVENT_KEYWORDS = {
     "birthday": "birthday trip",
     "proposal": "proposal",
     "babymoon": "babymoon",
+}
+
+
+_GROUP_TYPE_MATCH_WEIGHT = 1.4
+_GROUP_TYPE_PARTIAL_WEIGHT = 0.3
+_TONE_MATCH_WEIGHT = 0.8
+_MOOD_MATCH_WEIGHT = 1.0
+_OCCASION_MATCH_WEIGHT = 0.6
+
+_OCCASION_TAG_HINTS = {
+    "anniversary": {"romantic"},
+    "honeymoon": {"romantic"},
+    "proposal": {"romantic"},
+    "babymoon": {"wellness", "calm"},
+    "birthday": {"celebration"},
+    "birthday trip": {"celebration"},
 }
 
 
@@ -242,6 +282,16 @@ def _infer_duration_bucket(state: Mapping[str, object]) -> str | None:
 
 def _score_card(card: _ExperienceCard, state: Mapping[str, object]) -> float:
     metadata = card.get("metadata") or {}
+    brief_data = state.get("trip_brief") if isinstance(state.get("trip_brief"), Mapping) else {}
+
+    def _resolve_signal(key: str) -> object:
+        value = state.get(key)
+        if value:
+            return value
+        if isinstance(brief_data, Mapping):
+            return brief_data.get(key)
+        return None
+
     state_vibes = {
         _normalise_signal(item)
         for item in state.get("vibe", [])
@@ -265,7 +315,7 @@ def _score_card(card: _ExperienceCard, state: Mapping[str, object]) -> float:
     else:
         score += 0.5
 
-    pace = _normalise_signal(state.get("travel_pace"))
+    pace = _normalise_signal(_resolve_signal("travel_pace"))
     if pace:
         card_pace = {
             _normalise_signal(item)
@@ -277,7 +327,7 @@ def _score_card(card: _ExperienceCard, state: Mapping[str, object]) -> float:
         elif card_pace:
             score += 0.4
 
-    budget = _normalise_signal(state.get("budget"))
+    budget = _normalise_signal(_resolve_signal("budget"))
     if budget:
         card_budget = {
             _normalise_signal(item)
@@ -289,6 +339,43 @@ def _score_card(card: _ExperienceCard, state: Mapping[str, object]) -> float:
         elif card_budget:
             score -= 0.3
 
+    group_type = _normalise_signal(_resolve_signal("group_type"))
+    if group_type:
+        card_groups = {
+            _normalise_signal(item)
+            for item in metadata.get("group_types", []) or []
+            if isinstance(item, str)
+        }
+        if group_type in card_groups:
+            score += _GROUP_TYPE_MATCH_WEIGHT
+        elif card_groups:
+            score += _GROUP_TYPE_PARTIAL_WEIGHT
+
+    tone = _normalise_signal(_resolve_signal("tone"))
+    mood_signal = _normalise_signal(_resolve_signal("mood"))
+
+    card_tones = {
+        _normalise_signal(item)
+        for item in metadata.get("tones", []) or []
+        if isinstance(item, str)
+    }
+    if tone and card_tones:
+        if tone in card_tones:
+            score += _TONE_MATCH_WEIGHT
+        else:
+            score += 0.2
+
+    card_moods = {
+        _normalise_signal(item)
+        for item in metadata.get("moods", []) or []
+        if isinstance(item, str)
+    }
+    if mood_signal and card_moods:
+        if mood_signal in card_moods:
+            score += _MOOD_MATCH_WEIGHT
+        else:
+            score -= 0.2
+
     duration = _infer_duration_bucket(state)
     if duration:
         card_duration = {
@@ -298,6 +385,18 @@ def _score_card(card: _ExperienceCard, state: Mapping[str, object]) -> float:
         }
         if duration in card_duration:
             score += 1.5
+
+    occasion = _normalise_signal(_resolve_signal("occasion"))
+    if occasion:
+        relevant_tags = _OCCASION_TAG_HINTS.get(occasion, set())
+        if relevant_tags:
+            card_tags = {
+                _normalise_signal(tag)
+                for tag in metadata.get("tags", []) or []
+                if isinstance(tag, str)
+            }
+            if card_tags & relevant_tags:
+                score += _OCCASION_MATCH_WEIGHT
 
     custom_interests = {
         _normalise_signal(item)
@@ -564,6 +663,7 @@ def ensure_plan_state() -> None:
             "liked_inspirations": [],
             "saved_inspirations": [],
             "_activity_catalog": {},
+            "trip_brief": {},
             "personal_events": [],
             "share_public": True,
             "share_caption": "",
@@ -626,6 +726,7 @@ def _prepare_activity_cards(
 
     previous_likes = set(state.get("liked_cards", []))
     previous_saves = set(state.get("saved_cards", []))
+    forced_ids = previous_likes | previous_saves
 
     ranked_cards: List[Tuple[float, _ExperienceCard]] = []
     for card in _EXPERIENCE_CARDS:
@@ -636,8 +737,29 @@ def _prepare_activity_cards(
 
     ranked_cards.sort(key=lambda item: item[0], reverse=True)
 
-    min_cards = max(6, len(previous_likes | previous_saves))
-    selected_cards = [card for _, card in ranked_cards[:min_cards] or ranked_cards]
+    target_count = min(_MAX_GALLERY_CARDS, len(_EXPERIENCE_CARDS))
+    target_count = max(target_count, _MIN_GALLERY_CARDS)
+    if len(forced_ids) > target_count:
+        target_count = len(forced_ids)
+
+    selected_cards: List[_ExperienceCard] = []
+    selected_ids: set[str] = set()
+
+    for _, card in ranked_cards:
+        if card["id"] in forced_ids and card["id"] not in selected_ids:
+            selected_cards.append(card)
+            selected_ids.add(card["id"])
+
+    for _, card in ranked_cards:
+        if card["id"] in selected_ids:
+            continue
+        if len(selected_cards) >= target_count:
+            break
+        selected_cards.append(card)
+        selected_ids.add(card["id"])
+
+    if not selected_cards:
+        selected_cards = [card for _, card in ranked_cards]
 
     for card in selected_cards:
         catalog[str(card["id"])] = dict(card)
@@ -684,9 +806,54 @@ def _render_activity_cards(container, state: Dict[str, object]) -> None:
     _sync_activity_preferences(state)
 
 
-def _gallery_micro_intro(destination: object) -> str | None:
+def _compose_gallery_transition(state: Mapping[str, object]) -> str | None:
+    brief = state.get("trip_brief") if isinstance(state.get("trip_brief"), Mapping) else {}
+    if not isinstance(brief, Mapping):
+        brief = {}
+
+    raw_vibes = brief.get("vibes") if isinstance(brief.get("vibes"), list) else []
+    vibes = [v for v in raw_vibes if isinstance(v, str) and v.strip()]
+    pace = brief.get("travel_pace") if isinstance(brief.get("travel_pace"), str) else None
+    budget = brief.get("budget") if isinstance(brief.get("budget"), str) else None
+    group_type = brief.get("group_type") if isinstance(brief.get("group_type"), str) else None
+
+    fragments: List[str] = []
+    if vibes:
+        vibe_label = " + ".join(v.strip().lower() for v in vibes[:2])
+        fragments.append(f"{vibe_label} energy")
+    if pace:
+        fragments.append(f"{pace.strip().lower()} pacing")
+    if budget:
+        fragments.append(f"{budget.strip().lower()} budget lane")
+    if group_type:
+        fragments.append(f"for the {group_type.strip().lower()} crew")
+
+    if not fragments:
+        return None
+
+    if len(fragments) == 1:
+        descriptor = fragments[0]
+    else:
+        descriptor = ", ".join(fragments[:-1]) + f" and {fragments[-1]}"
+
+    subject = brief.get("destination")
+    if not isinstance(subject, str) or not subject.strip():
+        subject = str(state.get("destination") or "this journey").strip()
+
+    if not subject:
+        subject = "this journey"
+
+    return f"You're leaning into that {descriptor} for {subject}. Here's what that could look like."
+
+
+def _gallery_micro_intro(state: Mapping[str, object]) -> str | None:
     """Compose a brief cinematic line for the gallery scene."""
 
+    transition = _compose_gallery_transition(state)
+    if transition:
+        return transition
+
+    destination = state.get("destination")
     if destination:
         subject = str(destination).strip()
     else:
@@ -700,8 +867,48 @@ def _gallery_micro_intro(destination: object) -> str | None:
     )
 
 
+def _itinerary_ready_line(state: Mapping[str, object], selection_count: int) -> str | None:
+    if selection_count < _ITINERARY_MIN_SELECTIONS:
+        return None
+
+    brief = state.get("trip_brief") if isinstance(state.get("trip_brief"), Mapping) else {}
+    destination = None
+    if isinstance(brief, Mapping):
+        destination = brief.get("destination")
+    if not isinstance(destination, str) or not destination.strip():
+        destination = str(state.get("destination") or "this trip").strip()
+    if not destination:
+        destination = "this trip"
+
+    vibe_fragment = None
+    if isinstance(brief, Mapping):
+        raw_vibes = brief.get("vibes") if isinstance(brief.get("vibes"), list) else []
+        vibes = [v for v in raw_vibes if isinstance(v, str) and v.strip()]
+        if vibes:
+            vibe_fragment = " + ".join(v.strip().lower() for v in vibes[:2]) + " energy"
+
+    pace = None
+    if isinstance(brief, Mapping):
+        raw_pace = brief.get("travel_pace")
+        if isinstance(raw_pace, str) and raw_pace.strip():
+            pace = f"{raw_pace.strip().lower()} pacing"
+
+    descriptors = [fragment for fragment in [vibe_fragment, pace] if fragment]
+    if descriptors:
+        if len(descriptors) == 1:
+            detail = descriptors[0]
+        else:
+            detail = " and ".join(descriptors)
+        return (
+            f"{selection_count} experiences locked for {destination}. Ready for me to weave "
+            f"that {detail} into your itinerary?"
+        )
+
+    return f"{selection_count} experiences locked. Ready for me to weave them into your itinerary?"
+
+
 def _render_interest_gallery(container, state: Dict[str, object]) -> None:
-    intro = _gallery_micro_intro(state.get("destination"))
+    intro = _gallery_micro_intro(state)
     if intro:
         container.markdown(f"_{intro}_")
 
@@ -743,11 +950,24 @@ def _render_interest_gallery(container, state: Dict[str, object]) -> None:
             + ", ".join(f"`{interest}`" for interest in state["custom_interests"])
         )
 
+    selected_ids = PlanConversationWorkflow._selected_card_ids(state)
+    selection_count = len(selected_ids)
+
+    if selection_count < _ITINERARY_MIN_SELECTIONS:
+        container.caption(
+            "Like or save at least three experiences to unlock the cinematic itinerary preview."
+        )
+    else:
+        invite = _itinerary_ready_line(state, selection_count)
+        if invite:
+            container.markdown(f"_{invite}_")
+
     generate_clicked = container.button(
         "Generate my itinerary",
         type="primary",
         use_container_width=True,
         key="plan_generate_itinerary",
+        disabled=selection_count < _ITINERARY_MIN_SELECTIONS,
     )
     if generate_clicked:
         success = _handle_submit(state)
